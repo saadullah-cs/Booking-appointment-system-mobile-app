@@ -248,6 +248,44 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
     );
   }
 
+  Widget _buildVisionAnalyzerCard(ThemeData theme, ColorScheme cs) {
+    return PremiumCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.psychology_rounded, color: cs.primary, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                'AI Patient Analyzer',
+                style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w700, color: cs.onSurface),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Analyze patient posture, gait mechanics, facial paralysis, or skin lesions using live camera scan or photo uploads.',
+            style: GoogleFonts.poppins(fontSize: 11.5, color: cs.onSurface.withValues(alpha: 0.6)),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () => context.push('/vision-analyzer'),
+              icon: const Icon(Icons.document_scanner_rounded, size: 16),
+              label: Text('Open Vision Analyzer', style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold)),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showDetailsBottomSheet(Appointment apt) {
     showModalBottomSheet(
       context: context,
@@ -1056,6 +1094,8 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
                                     _buildClinicInfoCard(theme, cs),
                                     const SizedBox(height: 16),
                                     _buildChatShortcutCard(theme, cs),
+                                    const SizedBox(height: 16),
+                                    _buildVisionAnalyzerCard(theme, cs),
                                   ],
                                 ),
                               ),
@@ -1071,6 +1111,10 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
                               child: _buildGreetingBanner(theme, cs),
                             ),
                             _buildMetricsRow(todayCount, pendingCount, confirmedCount),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                              child: _buildVisionAnalyzerCard(theme, cs),
+                            ),
                             _buildSearchAndFilters(),
                             _buildAppointmentsList(filteredAppointments, shrinkWrap: true),
                           ],

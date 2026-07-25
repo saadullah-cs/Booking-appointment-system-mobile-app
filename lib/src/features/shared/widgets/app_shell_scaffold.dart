@@ -566,6 +566,12 @@ class _AppDrawer extends StatelessWidget {
                   onTap: () => _navigate(context, '/analytics'),
                 ),
                 _DrawerTile(
+                  icon: Icons.biotech_rounded,
+                  label: 'AI Vision Analyzer',
+                  selected: currentRoute == '/vision-analyzer',
+                  onTap: () => _navigate(context, '/vision-analyzer'),
+                ),
+                _DrawerTile(
                   icon: Icons.account_balance_wallet_rounded,
                   label: 'Payments',
                   selected: currentRoute == '/payments',

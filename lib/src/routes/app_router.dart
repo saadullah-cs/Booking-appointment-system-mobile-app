@@ -23,6 +23,7 @@ import '../features/auth/screens/staff_management_screen.dart';
 import '../features/auth/screens/staff_login_screen.dart';
 import '../features/dashboard/staff_dashboard_screen.dart';
 import '../features/chat/chat_screen.dart';
+import '../features/vision_analyzer/vision_analyzer_screen.dart';
 
 final appNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -65,6 +66,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/staff-login', name: 'staffLogin', builder: (context, state) => const StaffLoginScreen()),
       GoRoute(path: '/staff-dashboard', name: 'staffDashboard', builder: (context, state) => const StaffDashboardScreen()),
       GoRoute(path: '/chat', name: 'chat', builder: (context, state) => const ChatScreen()),
+      GoRoute(path: '/vision-analyzer', name: 'visionAnalyzer', builder: (context, state) => const VisionAnalyzerScreen()),
       GoRoute(
         path: '/appointment/:id',
         name: 'appointmentDetail',
