@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:gct/src/features/vision_analyzer/vision_analyzer_screen.dart';
 
 void main() {
   testWidgets('Vision Analyzer: structure, scenario switching, and tabs', (WidgetTester tester) async {
-    tester.view.physicalSize = const Size(900, 1600);
+    SharedPreferences.setMockInitialValues({});
+    tester.view.physicalSize = const Size(1200, 1600);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() {
       tester.view.resetPhysicalSize();
@@ -19,8 +21,8 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 300));
 
-    // AppBar title present
-    expect(find.text('AI Vision Analyzer'), findsOneWidget);
+    // AppBar title present (in shell and screen header)
+    expect(find.text('AI Vision Analyzer'), findsWidgets);
 
     // All 4 scenarios visible
     expect(find.text('Spine & Posture'), findsOneWidget);

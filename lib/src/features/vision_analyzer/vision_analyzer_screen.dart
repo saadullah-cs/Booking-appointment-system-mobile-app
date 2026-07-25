@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
@@ -7,8 +8,13 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 
+import '../../services/app_preferences.dart';
 import '../../theme/app_theme.dart';
+import '../shared/widgets/app_shell_scaffold.dart';
 import '../shared/widgets/premium_card.dart';
 
 // ─── Enums ───────────────────────────────────────────────────────────────────
@@ -43,6 +49,31 @@ class ScanRecord {
     required this.timestamp,
     this.note = '',
   });
+
+  Map<String, dynamic> toJson() => {
+        'patient': patient,
+        'scenario': scenario.name,
+        'severity': severity,
+        'severityColor': severityColor.value,
+        'timestamp': timestamp.toIso8601String(),
+        'note': note,
+      };
+
+  factory ScanRecord.fromJson(Map<String, dynamic> json) {
+    final scName = json['scenario'] as String? ?? 'posture';
+    final scenario = VisionScenario.values.firstWhere(
+      (e) => e.name == scName,
+      orElse: () => VisionScenario.posture,
+    );
+    return ScanRecord(
+      patient: json['patient'] as String? ?? 'Unknown',
+      scenario: scenario,
+      severity: json['severity'] as String? ?? 'Normal',
+      severityColor: Color(json['severityColor'] as int? ?? 0xFF10B981),
+      timestamp: DateTime.tryParse(json['timestamp'] as String? ?? '') ?? DateTime.now(),
+      note: json['note'] as String? ?? '',
+    );
+  }
 }
 
 // ─── Screen ──────────────────────────────────────────────────────────────────
@@ -93,6 +124,7 @@ class _VisionAnalyzerScreenState extends ConsumerState<VisionAnalyzerScreen>
   void initState() {
     super.initState();
     _loadPatients();
+    _loadHistory();
 
     _scanLineCtrl = AnimationController(vsync: this, duration: const Duration(seconds: 2))
       ..repeat(reverse: true);
@@ -106,6 +138,29 @@ class _VisionAnalyzerScreenState extends ConsumerState<VisionAnalyzerScreen>
     _pulse = Tween<double>(begin: 0.8, end: 1.0).animate(
         CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut));
     _fabAnim = CurvedAnimation(parent: _fabCtrl, curve: Curves.easeOut);
+  }
+
+  Future<void> _loadHistory() async {
+    try {
+      final prefs = await AppPreferences.instance.prefs;
+      final raw = prefs.getString('vision_analyzer_history') ?? '[]';
+      final List<dynamic> list = jsonDecode(raw);
+      final records = list.map((e) => ScanRecord.fromJson(Map<String, dynamic>.from(e as Map))).toList();
+      if (mounted) {
+        setState(() {
+          _history.clear();
+          _history.addAll(records);
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _saveHistoryToPrefs() async {
+    try {
+      final prefs = await AppPreferences.instance.prefs;
+      final list = _history.map((e) => e.toJson()).toList();
+      await prefs.setString('vision_analyzer_history', jsonEncode(list));
+    } catch (_) {}
   }
 
   @override
@@ -163,10 +218,10 @@ class _VisionAnalyzerScreenState extends ConsumerState<VisionAnalyzerScreen>
   Future<void> _runScan() async {
     setState(() { _isScanning = true; _scanProgress = 0; _reportReady = false; });
     final stages = [
-      ('Initializing ML models…', 600),
-      ('Segmenting capture regions…', 900),
-      ('Extracting landmark vectors…', 1000),
-      ('Synthesizing AI diagnosis…', 700),
+      ('Initializing vision ML models…', 600),
+      ('Segmenting landmark regions…', 900),
+      ('Extracting anatomical vectors…', 1000),
+      ('Synthesizing clinical analysis…', 700),
     ];
     for (int i = 0; i < stages.length; i++) {
       if (!mounted) return;
@@ -189,9 +244,153 @@ class _VisionAnalyzerScreenState extends ConsumerState<VisionAnalyzerScreen>
       timestamp: DateTime.now(),
       note: _notesController.text,
     );
-    setState(() { _history.insert(0, record); _notesController.clear(); });
-    _snack('Saved to History ✅');
+    setState(() {
+      _history.insert(0, record);
+      _notesController.clear();
+    });
+    _saveHistoryToPrefs();
+    _snack('Saved to Patient History ✅');
     _tabCtrl.animateTo(2);
+  }
+
+  Future<void> _exportReportPdf() async {
+    try {
+      final info = _buildReportInfo();
+      final doc = pw.Document();
+      final primaryColor = PdfColor.fromHex('#0E7490');
+      final accentColor = PdfColor.fromHex('#F8FAFC');
+      final borderColor = PdfColor.fromHex('#E2E8F0');
+      final textColor = PdfColor.fromHex('#1E293B');
+      final labelColor = PdfColor.fromHex('#64748B');
+
+      final patientName = _selectedPatient.isEmpty ? 'Patient / Walk-in' : _selectedPatient;
+      final dateStr = DateFormat('EEEE, MMMM d, yyyy - HH:mm').format(DateTime.now());
+
+      doc.addPage(
+        pw.Page(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(24),
+          build: (context) {
+            return pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                // Header
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text('GONSTEAD CHIROPRACTIC CLINIC', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: primaryColor)),
+                        pw.Text('AI Patient Vision Analysis & Posture Report', style: pw.TextStyle(fontSize: 10, color: labelColor)),
+                      ],
+                    ),
+                    pw.Text(dateStr, style: pw.TextStyle(fontSize: 8, color: labelColor)),
+                  ],
+                ),
+                pw.SizedBox(height: 8),
+                pw.Divider(color: borderColor),
+                pw.SizedBox(height: 12),
+
+                // Patient Banner
+                pw.Container(
+                  padding: const pw.EdgeInsets.all(10),
+                  decoration: pw.BoxDecoration(color: accentColor, borderRadius: pw.BorderRadius.circular(6), border: pw.Border.all(color: borderColor)),
+                  child: pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    children: [
+                      pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+                        pw.Text('PATIENT NAME', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold, color: labelColor)),
+                        pw.Text(patientName, style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: textColor)),
+                      ]),
+                      pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+                        pw.Text('SCAN MODULE', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold, color: labelColor)),
+                        pw.Text(_scenario.label, style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: primaryColor)),
+                      ]),
+                      pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+                        pw.Text('SEVERITY ASSESSMENT', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold, color: labelColor)),
+                        pw.Text(info['severity'] as String, style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColor.fromHex('#DC2626'))),
+                      ]),
+                    ],
+                  ),
+                ),
+                pw.SizedBox(height: 14),
+
+                // Diagnostic Observation
+                pw.Text('CLINICAL FINDINGS & DIAGNOSTIC OBSERVATIONS', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: primaryColor)),
+                pw.SizedBox(height: 6),
+                pw.Container(
+                  width: double.infinity,
+                  padding: const pw.EdgeInsets.all(10),
+                  decoration: pw.BoxDecoration(border: pw.Border.all(color: borderColor), borderRadius: pw.BorderRadius.circular(6)),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text('Observation:', style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: labelColor)),
+                      pw.Text(info['obs'] as String, style: pw.TextStyle(fontSize: 9.5, color: textColor)),
+                      pw.SizedBox(height: 8),
+                      pw.Text('Diagnostic Synthesis:', style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: labelColor)),
+                      pw.Text(info['diagnostic'] as String, style: pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold, color: textColor)),
+                    ],
+                  ),
+                ),
+                pw.SizedBox(height: 14),
+
+                // Recommended Actions
+                pw.Text('RECOMMENDED CLINICAL ACTIONS', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: primaryColor)),
+                pw.SizedBox(height: 6),
+                ...(info['actions'] as List<String>).map((act) => pw.Padding(
+                  padding: const pw.EdgeInsets.only(bottom: 4),
+                  child: pw.Row(
+                    children: [
+                      pw.Text('- ', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: primaryColor)),
+                      pw.Expanded(child: pw.Text(act, style: pw.TextStyle(fontSize: 9, color: textColor))),
+                    ],
+                  ),
+                )),
+                pw.SizedBox(height: 14),
+
+                // Doctor Notes
+                if (_notesController.text.isNotEmpty) ...[
+                  pw.Text('PRACTITIONER NOTES', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: primaryColor)),
+                  pw.SizedBox(height: 6),
+                  pw.Container(
+                    width: double.infinity,
+                    padding: const pw.EdgeInsets.all(10),
+                    decoration: pw.BoxDecoration(color: accentColor, borderRadius: pw.BorderRadius.circular(6), border: pw.Border.all(color: borderColor)),
+                    child: pw.Text(_notesController.text, style: pw.TextStyle(fontSize: 9, color: textColor)),
+                  ),
+                  pw.SizedBox(height: 14),
+                ],
+
+                pw.Spacer(),
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Container(width: 120, height: 1, color: labelColor),
+                        pw.SizedBox(height: 4),
+                        pw.Text('Practitioner Signature', style: pw.TextStyle(fontSize: 8, color: labelColor)),
+                      ],
+                    ),
+                    pw.Text('Verified by Gonstead Clinical Vision Decision Support', style: pw.TextStyle(fontSize: 7, color: labelColor)),
+                  ],
+                ),
+              ],
+            );
+          },
+        ),
+      );
+
+      await Printing.layoutPdf(
+        onLayout: (format) async => doc.save(),
+        name: 'Vision_Report_${patientName.replaceAll(' ', '_')}.pdf',
+      );
+    } catch (e) {
+      _snack('PDF Generation Failed: $e', isError: true);
+    }
   }
 
   void _snack(String msg, {bool isError = false}) {
@@ -319,21 +518,43 @@ class _VisionAnalyzerScreenState extends ConsumerState<VisionAnalyzerScreen>
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    return GestureDetector(
-      onTap: _closeFab,
-      child: Scaffold(
-        backgroundColor: cs.surface,
-        appBar: _buildAppBar(cs),
-        body: Column(
+    return AppShellScaffold(
+      title: 'AI Vision Analyzer',
+      currentRoute: '/vision-analyzer',
+      actions: [
+        PopupMenuButton<String>(
+          icon: const Icon(Icons.person_search_rounded),
+          tooltip: 'Select Patient',
+          itemBuilder: (_) => _patients.map((p) => PopupMenuItem(value: p, child: Text(p, style: GoogleFonts.poppins(fontSize: 13)))).toList(),
+          onSelected: (p) => setState(() => _selectedPatient = p),
+        ),
+        IconButton(
+          icon: Icon(_isLive ? Icons.videocam_rounded : Icons.videocam_off_rounded),
+          color: _isLive ? Colors.greenAccent : cs.onSurface.withOpacity(0.5),
+          tooltip: _isLive ? 'Live feed active' : 'Reset to live',
+          onPressed: _resetToLive,
+        ),
+      ],
+      body: GestureDetector(
+        onTap: _closeFab,
+        child: Stack(
           children: [
-            _buildScenarioBar(cs),
-            _buildHeroScanner(cs),
-            _buildMetricRow(cs),
-            _buildTabBar(cs),
-            Expanded(child: _buildTabView(cs)),
+            Column(
+              children: [
+                _buildScenarioBar(cs),
+                _buildHeroScanner(cs),
+                _buildMetricRow(cs),
+                _buildTabBar(cs),
+                Expanded(child: _buildTabView(cs)),
+              ],
+            ),
+            Positioned(
+              bottom: 16,
+              right: 16,
+              child: _buildFab(cs),
+            ),
           ],
         ),
-        floatingActionButton: _buildFab(cs),
       ),
     );
   }
@@ -715,7 +936,7 @@ class _VisionAnalyzerScreenState extends ConsumerState<VisionAnalyzerScreen>
               Container(width: 4, height: 40, decoration: BoxDecoration(color: col, borderRadius: BorderRadius.circular(4))),
               const SizedBox(width: 12),
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('AI AGENT CLASSIFICATION', style: GoogleFonts.poppins(fontSize: 9.5, fontWeight: FontWeight.w800, color: cs.onSurface.withOpacity(0.4), letterSpacing: 1)),
+                Text('AI-ASSISTED CLINICAL DECISION SUPPORT', style: GoogleFonts.poppins(fontSize: 9.5, fontWeight: FontWeight.w800, color: cs.onSurface.withOpacity(0.4), letterSpacing: 1)),
                 Text(info['severity'] as String, style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w900, color: col)),
               ])),
               Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: col.withOpacity(0.1), shape: BoxShape.circle),
@@ -772,17 +993,37 @@ class _VisionAnalyzerScreenState extends ConsumerState<VisionAnalyzerScreen>
             ),
           ]),
         ),
-        const SizedBox(height: 12),
-        ElevatedButton.icon(
-          onPressed: _saveRecord,
-          icon: const Icon(Icons.save_rounded),
-          label: Text('Save to Patient History', style: GoogleFonts.poppins(fontWeight: FontWeight.w700)),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: _scenario.color,
-            foregroundColor: Colors.white,
-            minimumSize: const Size(double.infinity, 52),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          ),
+        const SizedBox(height: 14),
+        Row(
+          children: [
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: _saveRecord,
+                icon: const Icon(Icons.save_rounded, size: 18),
+                label: Text('Save to History', style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 12.5)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _scenario.color,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(0, 50),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _exportReportPdf,
+                icon: const Icon(Icons.picture_as_pdf_rounded, size: 18),
+                label: Text('Export PDF Report', style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 12.5)),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: _scenario.color,
+                  side: BorderSide(color: _scenario.color, width: 1.5),
+                  minimumSize: const Size(0, 50),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 80),
       ],
