@@ -1,6 +1,8 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:printing/printing.dart';
 import 'package:url_launcher/url_launcher_string.dart';
@@ -91,6 +93,11 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
   String _statusValue = 'Pending';
   DateTime? _scheduledAt;
 
+  // New state
+  final _techniqueController = TextEditingController();
+  final _improvementController = TextEditingController();
+  String? _posturalPhotoPath;
+
   @override
   void initState() {
     super.initState();
@@ -111,6 +118,8 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
     _followUpController.dispose();
     _professionController.dispose();
     _durationController.dispose();
+    _techniqueController.dispose();
+    _improvementController.dispose();
     super.dispose();
   }
 
@@ -138,6 +147,11 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
       _durationController.text = apt?.durationMinutes.toString() ?? '40';
       
       _isLoading = false;
+
+      // Init new fields
+      _techniqueController.text = apt?.adjustmentTechnique ?? '';
+      _improvementController.text = apt?.patientImprovement ?? '';
+      _posturalPhotoPath = apt?.posturalPhotoPath?.isNotEmpty == true ? apt!.posturalPhotoPath : null;
     });
   }
 
@@ -213,6 +227,9 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
       nextFollowUp: _followUpController.text.trim(),
       patientProfession: _professionController.text.trim(),
       durationMinutes: int.tryParse(_durationController.text.trim()) ?? _appointment!.durationMinutes,
+      adjustmentTechnique: _techniqueController.text.trim(),
+      patientImprovement: _improvementController.text.trim(),
+      posturalPhotoPath: _posturalPhotoPath ?? '',
       updatedAt: DateTime.now(),
     );
     await _repo.updateAppointment(updated);
@@ -601,6 +618,20 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
                   const SizedBox(height: 16),
                   const Divider(),
                   const SizedBox(height: 12),
+                  // Patient Improvement rating
+                  if (apt.patientImprovement.isNotEmpty)
+                    _DetailRow(
+                      icon: Icons.trending_up_rounded,
+                      label: 'Improvement',
+                      value: apt.patientImprovement,
+                    ),
+                  // Adjustment Technique
+                  if (apt.adjustmentTechnique.isNotEmpty)
+                    _DetailRow(
+                      icon: Icons.tune_rounded,
+                      label: 'Technique',
+                      value: apt.adjustmentTechnique,
+                    ),
                   // Spinal Adjustments
                   _DetailRow(
                     icon: Icons.accessibility_new_rounded,
@@ -619,6 +650,29 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
                     label: 'Follow-up',
                     value: apt.nextFollowUp.isNotEmpty ? apt.nextFollowUp : 'As needed',
                   ),
+                  // Posture Photo
+                  if (apt.posturalPhotoPath.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Text('Posture Photo', style: GoogleFonts.poppins(fontSize: 11, color: cs.onSurface.withValues(alpha: 0.5))),
+                    const SizedBox(height: 6),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.file(
+                        File(apt.posturalPhotoPath),
+                        height: 180,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Container(
+                          height: 60,
+                          decoration: BoxDecoration(
+                            color: cs.surfaceVariant,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Center(child: Text('Photo not available', style: GoogleFonts.poppins(fontSize: 12))),
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -697,6 +751,12 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
         _DetailRow(icon: Icons.calendar_today_rounded, label: 'Date', value: dateText),
         _DetailRow(icon: Icons.timer_outlined, label: 'Duration', value: '${apt.durationMinutes} minutes'),
         _DetailRow(icon: Icons.medical_services_outlined, label: 'Treatment', value: apt.treatmentType),
+        if (apt.dateOfBirth != null)
+          _DetailRow(
+            icon: Icons.cake_rounded,
+            label: 'DOB / Age',
+            value: '${DateFormat('d MMM y').format(apt.dateOfBirth!)}  •  ${DateTime.now().year - apt.dateOfBirth!.year} yrs',
+          ),
         if (apt.phoneNumber.isNotEmpty)
           _DetailRow(
             icon: Icons.phone_outlined,
@@ -826,6 +886,110 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
             divisions: 10,
             activeColor: _getPainColor(_painLevel.round()),
             onChanged: (v) => setState(() => _painLevel = v),
+          ),
+          const SizedBox(height: 10),
+
+          // Adjustment Technique dropdown
+          _buildDropdownTextField(
+            controller: _techniqueController,
+            labelText: 'Adjustment Technique',
+            prefixIcon: Icons.tune_rounded,
+            hintText: 'e.g. Gonstead, Diversified',
+            options: [
+              'Gonstead Technique',
+              'Diversified Technique',
+              'Drop Table (Thompson)',
+              'Activator Method',
+              'SOT (Sacro-Occipital Technique)',
+              'Flexion-Distraction (Cox)',
+              'Upper Cervical (NUCCA)',
+              'Toggle Recoil',
+              'Logan Basic',
+              'Applied Kinesiology',
+              'Webster Technique',
+              'Myofascial Release',
+              'Soft Tissue Mobilisation',
+              'PIR (Post-Isometric Relaxation)',
+              'Full Spine Adjustment',
+            ],
+          ),
+          const SizedBox(height: 10),
+
+          // Patient Improvement
+          _buildDropdownTextField(
+            controller: _improvementController,
+            labelText: 'Patient Improvement vs Last Visit',
+            prefixIcon: Icons.trending_up_rounded,
+            hintText: 'How does patient feel?',
+            options: [
+              'Much Better — Significant improvement',
+              'Better — Noticeable improvement',
+              'Slightly Better — Minor improvement',
+              'Same — No change',
+              'Slightly Worse — Minor regression',
+              'Worse — Noticeable regression',
+              'First Visit — No comparison',
+            ],
+          ),
+          const SizedBox(height: 10),
+
+          // Posture Photo in edit mode
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.photo_camera_rounded, size: 18, color: Theme.of(context).colorScheme.primary),
+                  const SizedBox(width: 8),
+                  Text('Posture Photo', style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600)),
+                  const Spacer(),
+                  if (_posturalPhotoPath != null)
+                    TextButton.icon(
+                      icon: const Icon(Icons.delete_outline_rounded, size: 16),
+                      label: const Text('Remove'),
+                      style: TextButton.styleFrom(foregroundColor: Colors.red),
+                      onPressed: () => setState(() => _posturalPhotoPath = null),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              if (_posturalPhotoPath != null)
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.file(
+                    File(_posturalPhotoPath!),
+                    height: 150,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                  ),
+                )
+              else
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        icon: const Icon(Icons.camera_alt_rounded, size: 18),
+                        label: const Text('Camera'),
+                        onPressed: () async {
+                          final img = await ImagePicker().pickImage(source: ImageSource.camera, imageQuality: 80);
+                          if (img != null) setState(() => _posturalPhotoPath = img.path);
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        icon: const Icon(Icons.photo_library_rounded, size: 18),
+                        label: const Text('Gallery'),
+                        onPressed: () async {
+                          final img = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 80);
+                          if (img != null) setState(() => _posturalPhotoPath = img.path);
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+            ],
           ),
           const SizedBox(height: 10),
 
@@ -960,10 +1124,12 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
     required List<String> options,
     TextInputType keyboardType = TextInputType.text,
     String? hintText,
+    void Function(String)? onChanged,
   }) {
     return TextFormField(
       controller: controller,
       keyboardType: keyboardType,
+      onChanged: onChanged,
       decoration: InputDecoration(
         labelText: labelText,
         hintText: hintText,
@@ -972,6 +1138,7 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
           icon: const Icon(Icons.arrow_drop_down_rounded, size: 28),
           onSelected: (val) {
             controller.text = val;
+            onChanged?.call(val);
           },
           itemBuilder: (BuildContext context) {
             return options.map((String choice) {

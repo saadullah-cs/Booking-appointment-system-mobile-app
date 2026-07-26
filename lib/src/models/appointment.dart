@@ -29,6 +29,12 @@ class Appointment {
   // Appointment Duration
   final int durationMinutes;
 
+  // New Fields
+  final DateTime? dateOfBirth;
+  final String adjustmentTechnique;
+  final String patientImprovement;
+  final String posturalPhotoPath;
+
   Appointment({
     required this.id,
     required this.patientName,
@@ -53,6 +59,10 @@ class Appointment {
     this.treatmentPlanTotalSessions,
     this.sessionNumber,
     this.durationMinutes = 40,
+    this.dateOfBirth,
+    this.adjustmentTechnique = '',
+    this.patientImprovement = '',
+    this.posturalPhotoPath = '',
   });
 
   factory Appointment.fromJson(Map<String, dynamic> json) {
@@ -80,6 +90,10 @@ class Appointment {
       treatmentPlanTotalSessions: json['treatmentPlanTotalSessions'] != null ? int.tryParse(json['treatmentPlanTotalSessions'].toString()) : null,
       sessionNumber: json['sessionNumber'] != null ? int.tryParse(json['sessionNumber'].toString()) : null,
       durationMinutes: json['durationMinutes'] != null ? int.tryParse(json['durationMinutes'].toString()) ?? 40 : 40,
+      dateOfBirth: DateTime.tryParse(json['dateOfBirth']?.toString() ?? ''),
+      adjustmentTechnique: json['adjustmentTechnique']?.toString() ?? '',
+      patientImprovement: json['patientImprovement']?.toString() ?? '',
+      posturalPhotoPath: json['posturalPhotoPath']?.toString() ?? '',
     );
   }
 
@@ -108,6 +122,10 @@ class Appointment {
       'treatmentPlanTotalSessions': treatmentPlanTotalSessions,
       'sessionNumber': sessionNumber,
       'durationMinutes': durationMinutes,
+      'dateOfBirth': dateOfBirth?.toIso8601String(),
+      'adjustmentTechnique': adjustmentTechnique,
+      'patientImprovement': patientImprovement,
+      'posturalPhotoPath': posturalPhotoPath,
     };
   }
 
@@ -134,6 +152,10 @@ class Appointment {
     int? treatmentPlanTotalSessions,
     int? sessionNumber,
     int? durationMinutes,
+    DateTime? dateOfBirth,
+    String? adjustmentTechnique,
+    String? patientImprovement,
+    String? posturalPhotoPath,
   }) {
     return Appointment(
       id: id,
@@ -159,6 +181,10 @@ class Appointment {
       treatmentPlanTotalSessions: treatmentPlanTotalSessions ?? this.treatmentPlanTotalSessions,
       sessionNumber: sessionNumber ?? this.sessionNumber,
       durationMinutes: durationMinutes ?? this.durationMinutes,
+      dateOfBirth: dateOfBirth ?? this.dateOfBirth,
+      adjustmentTechnique: adjustmentTechnique ?? this.adjustmentTechnique,
+      patientImprovement: patientImprovement ?? this.patientImprovement,
+      posturalPhotoPath: posturalPhotoPath ?? this.posturalPhotoPath,
     );
   }
 }

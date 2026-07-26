@@ -1,7 +1,9 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
 import '../../features/shared/widgets/app_shell_scaffold.dart';
@@ -45,6 +47,10 @@ class _BookingScreenState extends ConsumerState<BookingScreen> with SingleTicker
   int? _treatmentPlanTotalSessions;
   int? _sessionNumber;
   int _durationMinutes = 40;
+
+  // New fields
+  DateTime? _selectedDob;
+  String? _posturalPhotoPath;
 
   late final AnimationController _animController;
   late final Animation<double> _fadeAnim;
@@ -269,6 +275,8 @@ class _BookingScreenState extends ConsumerState<BookingScreen> with SingleTicker
         treatmentPlanTotalSessions: _treatmentPlanTotalSessions,
         sessionNumber: _sessionNumber,
         durationMinutes: _durationMinutes,
+        dateOfBirth: _selectedDob,
+        posturalPhotoPath: _posturalPhotoPath ?? '',
       );
 
       await _repository.saveAppointment(newAppt);
@@ -537,6 +545,118 @@ class _BookingScreenState extends ConsumerState<BookingScreen> with SingleTicker
                   },
                 ),
                 const SizedBox(height: 14),
+                // Date of Birth picker
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: cs.primary.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(Icons.cake_rounded, color: cs.primary, size: 20),
+                  ),
+                  title: Text(
+                    _selectedDob == null
+                        ? 'Date of Birth (Optional)'
+                        : 'DOB: ${DateFormat('d MMM y').format(_selectedDob!)}  •  Age: ${DateTime.now().year - _selectedDob!.year} yrs',
+                    style: GoogleFonts.poppins(
+                      fontSize: 13,
+                      fontWeight: _selectedDob == null ? FontWeight.w400 : FontWeight.w600,
+                      color: _selectedDob == null ? cs.onSurface.withValues(alpha: 0.45) : cs.onSurface,
+                    ),
+                  ),
+                  trailing: _selectedDob != null
+                      ? IconButton(
+                          icon: Icon(Icons.clear_rounded, size: 18, color: cs.onSurface.withValues(alpha: 0.4)),
+                          onPressed: () => setState(() => _selectedDob = null),
+                        )
+                      : Icon(Icons.arrow_drop_down_rounded, color: cs.primary),
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: _selectedDob ?? DateTime(1990),
+                      firstDate: DateTime(1920),
+                      lastDate: DateTime.now(),
+                      helpText: 'Select Patient Date of Birth',
+                    );
+                    if (picked != null) setState(() => _selectedDob = picked);
+                  },
+                ),
+                const SizedBox(height: 4),
+                const Divider(),
+                const SizedBox(height: 4),
+
+                // Posture Photo
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.photo_camera_rounded, size: 18, color: cs.primary),
+                        const SizedBox(width: 8),
+                        Text('Posture Photo (Optional)', style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600)),
+                        const Spacer(),
+                        if (_posturalPhotoPath != null)
+                          TextButton.icon(
+                            icon: const Icon(Icons.delete_outline_rounded, size: 16),
+                            label: const Text('Remove'),
+                            style: TextButton.styleFrom(foregroundColor: Colors.red),
+                            onPressed: () => setState(() => _posturalPhotoPath = null),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    if (_posturalPhotoPath != null)
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Image.file(
+                          File(_posturalPhotoPath!),
+                          height: 160,
+                          width: double.infinity,
+                          fit: BoxFit.cover,
+                        ),
+                      )
+                    else
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              icon: const Icon(Icons.camera_alt_rounded, size: 18),
+                              label: const Text('Camera'),
+                              onPressed: () async {
+                                final picker = ImagePicker();
+                                final img = await picker.pickImage(
+                                  source: ImageSource.camera,
+                                  imageQuality: 80,
+                                );
+                                if (img != null) setState(() => _posturalPhotoPath = img.path);
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              icon: const Icon(Icons.photo_library_rounded, size: 18),
+                              label: const Text('Gallery'),
+                              onPressed: () async {
+                                final picker = ImagePicker();
+                                final img = await picker.pickImage(
+                                  source: ImageSource.gallery,
+                                  imageQuality: 80,
+                                );
+                                if (img != null) setState(() => _posturalPhotoPath = img.path);
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                const Divider(),
+                const SizedBox(height: 4),
+
                 SwitchListTile.adaptive(
                   value: _isEmergency,
                   onChanged: (v) => setState(() => _isEmergency = v),
@@ -803,10 +923,24 @@ class _BookingScreenState extends ConsumerState<BookingScreen> with SingleTicker
                   value: 'Session ${_sessionNumber ?? 1} of $_treatmentPlanTotalSessions Sessions Plan',
                 ),
               _ConfirmRow(label: 'Duration', value: '$_durationMinutes minutes'),
+              if (_selectedDob != null)
+                _ConfirmRow(
+                  label: 'DOB / Age',
+                  value: '${DateFormat('d MMM y').format(_selectedDob!)}  •  ${DateTime.now().year - _selectedDob!.year} yrs',
+                ),
               if (_isEmergency)
                 _ConfirmRow(label: 'Priority', value: 'EMERGENCY (Custom Time)'),
               if (_reasonController.text.isNotEmpty)
                 _ConfirmRow(label: 'Reason', value: _reasonController.text),
+              if (_posturalPhotoPath != null) ...[
+                const SizedBox(height: 8),
+                Text('Posture Photo', style: GoogleFonts.poppins(fontSize: 12, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5))),
+                const SizedBox(height: 6),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: Image.file(File(_posturalPhotoPath!), height: 120, width: double.infinity, fit: BoxFit.cover),
+                ),
+              ],
               const SizedBox(height: 6),
               const Divider(),
               const SizedBox(height: 10),
