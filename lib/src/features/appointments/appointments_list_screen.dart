@@ -7,6 +7,8 @@ import '../utils/import_export_service.dart';
 import '../../services/app_preferences.dart';
 import 'package:uuid/uuid.dart';
 
+import 'package:url_launcher/url_launcher_string.dart';
+
 import '../shared/widgets/app_shell_scaffold.dart';
 import '../shared/widgets/premium_card.dart';
 import '../../models/appointment.dart';
@@ -566,6 +568,67 @@ class _AppointmentListView extends StatelessWidget {
   final Future<void> Function() onRefresh;
   final String emptyMessage;
 
+  Future<void> _launchWhatsApp(BuildContext context, String phone, String patientName, String timeStr) async {
+    final cleanPhone = phone.replaceAll(RegExp(r'\s+|-|\(|\)'), '');
+    if (cleanPhone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No phone number available for WhatsApp.')),
+      );
+      return;
+    }
+    final message = Uri.encodeComponent(
+        "Hello $patientName, this is a reminder for your appointment scheduled ($timeStr) at Gonstead Chiropractic Treatment. Thank you!");
+    String rawDigits = cleanPhone.replaceAll('+', '');
+    if (rawDigits.startsWith('0')) {
+      rawDigits = '92${rawDigits.substring(1)}';
+    }
+    final nativeUrl = "whatsapp://send?phone=$rawDigits&text=$message";
+    final webUrl = "https://api.whatsapp.com/send?phone=$rawDigits&text=$message";
+    final shortUrl = "https://wa.me/$rawDigits?text=$message";
+
+    try {
+      if (await canLaunchUrlString(nativeUrl)) {
+        await launchUrlString(nativeUrl);
+        return;
+      }
+      if (await canLaunchUrlString(webUrl)) {
+        await launchUrlString(webUrl, mode: LaunchMode.externalApplication);
+        return;
+      }
+      await launchUrlString(shortUrl, mode: LaunchMode.externalApplication);
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not launch WhatsApp. Please check if it is installed.')),
+        );
+      }
+    }
+  }
+
+  Future<void> _makeCall(BuildContext context, String phone) async {
+    final cleanPhone = phone.replaceAll(RegExp(r'\s+|-|\(|\)'), '');
+    if (cleanPhone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No phone number available.')),
+      );
+      return;
+    }
+    final url = 'tel:$cleanPhone';
+    try {
+      if (await canLaunchUrlString(url)) {
+        await launchUrlString(url);
+      } else {
+        await launchUrlString(url);
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open phone dialer.')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -724,7 +787,7 @@ class _AppointmentListView extends StatelessWidget {
                           ],
                         ),
                       ),
-                      const SizedBox(width: 10),
+                      const SizedBox(width: 8),
                       // Status & Quick Navigation Actions on the right
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.end,
@@ -744,21 +807,33 @@ class _AppointmentListView extends StatelessWidget {
                               ),
                             ),
                           ),
-                          const SizedBox(height: 12),
+                          const SizedBox(height: 8),
                           Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               IconButton(
-                                icon: Icon(Icons.history_rounded, size: 18, color: cs.primary.withValues(alpha: 0.7)),
+                                icon: const Icon(Icons.call_rounded, size: 17, color: Color(0xFF10B981)),
+                                onPressed: () => _makeCall(context, apt.phoneNumber),
+                                tooltip: 'Call Patient',
+                                constraints: const BoxConstraints(),
+                                padding: const EdgeInsets.all(4),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.chat_bubble_rounded, size: 17, color: Color(0xFF25D366)),
+                                onPressed: () => _launchWhatsApp(context, apt.phoneNumber, apt.patientName, timeStr),
+                                tooltip: 'WhatsApp',
+                                constraints: const BoxConstraints(),
+                                padding: const EdgeInsets.all(4),
+                              ),
+                              IconButton(
+                                icon: Icon(Icons.history_rounded, size: 17, color: cs.primary.withValues(alpha: 0.7)),
                                 onPressed: () {
                                   context.push('/patient-history?name=${Uri.encodeComponent(apt.patientName)}&phone=${Uri.encodeComponent(apt.phoneNumber)}');
                                 },
                                 tooltip: 'Patient History',
                                 constraints: const BoxConstraints(),
-                                padding: EdgeInsets.zero,
+                                padding: const EdgeInsets.all(4),
                               ),
-                              const SizedBox(width: 6),
-                              Icon(Icons.chevron_right_rounded, size: 18, color: cs.onSurface.withValues(alpha: 0.3)),
                             ],
                           ),
                         ],

@@ -32,42 +32,74 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
 
   Future<void> _launchWhatsApp(String phone, String patientName, String dateStr) async {
     final cleanPhone = phone.replaceAll(RegExp(r'\s+|-|\(|\)'), '');
-    final message = Uri.encodeComponent(
-        "Hello $patientName, this is a reminder for your chiropractic appointment scheduled on $dateStr at Gonstead Chiropractic Treatment. Please let us know if you need to reschedule. Thank you!");
-    String finalPhone = cleanPhone;
-    if (!cleanPhone.startsWith('+') && !cleanPhone.startsWith('00')) {
-      if (cleanPhone.startsWith('0')) {
-        finalPhone = '+92${cleanPhone.substring(1)}';
-      } else {
-        finalPhone = '+92$cleanPhone';
-      }
-    }
-    final url = "https://wa.me/${finalPhone.replaceAll('+', '')}?text=$message";
-    try {
-      if (await canLaunchUrlString(url)) {
-        await launchUrlString(url, mode: LaunchMode.externalApplication);
-      } else {
+    if (cleanPhone.isEmpty) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not launch WhatsApp. Please check if it is installed.')),
+          const SnackBar(content: Text('Patient has no valid phone number.')),
         );
       }
+      return;
+    }
+    final message = Uri.encodeComponent(
+        "Hello $patientName, this is a reminder for your chiropractic appointment scheduled on $dateStr at Gonstead Chiropractic Treatment. Please let us know if you need to reschedule. Thank you!");
+    
+    String rawDigits = cleanPhone.replaceAll('+', '');
+    if (rawDigits.startsWith('0')) {
+      rawDigits = '92${rawDigits.substring(1)}';
+    }
+
+    final nativeUrl = "whatsapp://send?phone=$rawDigits&text=$message";
+    final webUrl = "https://api.whatsapp.com/send?phone=$rawDigits&text=$message";
+    final shortUrl = "https://wa.me/$rawDigits?text=$message";
+
+    try {
+      if (await canLaunchUrlString(nativeUrl)) {
+        await launchUrlString(nativeUrl);
+        return;
+      }
+      if (await canLaunchUrlString(webUrl)) {
+        await launchUrlString(webUrl, mode: LaunchMode.externalApplication);
+        return;
+      }
+      if (await canLaunchUrlString(shortUrl)) {
+        await launchUrlString(shortUrl, mode: LaunchMode.externalApplication);
+        return;
+      }
+      await launchUrlString(shortUrl, mode: LaunchMode.externalApplication);
     } catch (e) {
       debugPrint('WhatsApp launch failed: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open WhatsApp. Please check if WhatsApp is installed.')),
+        );
+      }
     }
   }
 
   Future<void> _makeCall(String phone) async {
-    final url = 'tel:$phone';
+    final cleanPhone = phone.replaceAll(RegExp(r'\s+|-|\(|\)'), '');
+    if (cleanPhone.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No phone number recorded for patient.')),
+        );
+      }
+      return;
+    }
+    final url = 'tel:$cleanPhone';
     try {
       if (await canLaunchUrlString(url)) {
         await launchUrlString(url);
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not launch dialer.')),
-        );
+        await launchUrlString(url);
       }
     } catch (e) {
       debugPrint('Call launch failed: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not launch phone dialer.')),
+        );
+      }
     }
   }
   final _nameController = TextEditingController();
