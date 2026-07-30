@@ -25,9 +25,18 @@ class AppColors {
   static const Color statusCompletedBg = Color(0xFFEFF6FF);
 
   // Gradient sets
-  static const List<Color> heroGradient = [Color(0xFF0E7490), Color(0xFF06B6D4)];
-  static const List<Color> heroGradientDark = [Color(0xFF0F172A), Color(0xFF1E293B)];
-  static const List<Color> cardGradient = [Color(0xFF0F172A), Color(0xFF0E7490)];
+  static const List<Color> heroGradient = [
+    Color(0xFF0E7490),
+    Color(0xFF06B6D4),
+  ];
+  static const List<Color> heroGradientDark = [
+    Color(0xFF0F172A),
+    Color(0xFF1E293B),
+  ];
+  static const List<Color> cardGradient = [
+    Color(0xFF0F172A),
+    Color(0xFF0E7490),
+  ];
 
   // Neutral
   static const Color navy = Color(0xFF0F172A);
@@ -41,21 +50,31 @@ class AppColors {
 
 Color statusColor(String status) {
   switch (status.toLowerCase()) {
-    case 'confirmed': return AppColors.statusConfirmed;
-    case 'cancelled': return AppColors.statusCancelled;
-    case 'completed': return AppColors.statusCompleted;
-    case 'no show': return const Color(0xFF8B5CF6);
-    default: return AppColors.statusPending;
+    case 'confirmed':
+      return AppColors.statusConfirmed;
+    case 'cancelled':
+      return AppColors.statusCancelled;
+    case 'completed':
+      return AppColors.statusCompleted;
+    case 'no show':
+      return const Color(0xFF8B5CF6);
+    default:
+      return AppColors.statusPending;
   }
 }
 
 Color statusBgColor(String status) {
   switch (status.toLowerCase()) {
-    case 'confirmed': return AppColors.statusConfirmedBg;
-    case 'cancelled': return AppColors.statusCancelledBg;
-    case 'completed': return AppColors.statusCompletedBg;
-    case 'no show': return const Color(0xFFF3E8FF);
-    default: return AppColors.statusPendingBg;
+    case 'confirmed':
+      return AppColors.statusConfirmedBg;
+    case 'cancelled':
+      return AppColors.statusCancelledBg;
+    case 'completed':
+      return AppColors.statusCompletedBg;
+    case 'no show':
+      return const Color(0xFFF3E8FF);
+    default:
+      return AppColors.statusPendingBg;
   }
 }
 
@@ -63,15 +82,45 @@ class AppTheme {
   static TextTheme _buildTextTheme(ColorScheme colorScheme) {
     final base = GoogleFonts.poppinsTextTheme();
     return base.copyWith(
-      displayLarge: base.displayLarge?.copyWith(color: colorScheme.onSurface, fontWeight: FontWeight.w800),
-      displayMedium: base.displayMedium?.copyWith(color: colorScheme.onSurface, fontWeight: FontWeight.w700),
-      titleLarge: base.titleLarge?.copyWith(color: colorScheme.onSurface, fontSize: 22, fontWeight: FontWeight.w700),
-      titleMedium: base.titleMedium?.copyWith(color: colorScheme.onSurface, fontSize: 17, fontWeight: FontWeight.w600),
-      titleSmall: base.titleSmall?.copyWith(color: colorScheme.onSurface, fontSize: 14, fontWeight: FontWeight.w600),
-      bodyLarge: base.bodyLarge?.copyWith(color: colorScheme.onSurface, fontSize: 15),
-      bodyMedium: base.bodyMedium?.copyWith(color: colorScheme.onSurface.withValues(alpha: 0.75), fontSize: 13),
-      bodySmall: base.bodySmall?.copyWith(color: colorScheme.onSurface.withValues(alpha: 0.55), fontSize: 12),
-      labelLarge: base.labelLarge?.copyWith(fontWeight: FontWeight.w600, fontSize: 14),
+      displayLarge: base.displayLarge?.copyWith(
+        color: colorScheme.onSurface,
+        fontWeight: FontWeight.w800,
+      ),
+      displayMedium: base.displayMedium?.copyWith(
+        color: colorScheme.onSurface,
+        fontWeight: FontWeight.w700,
+      ),
+      titleLarge: base.titleLarge?.copyWith(
+        color: colorScheme.onSurface,
+        fontSize: 22,
+        fontWeight: FontWeight.w700,
+      ),
+      titleMedium: base.titleMedium?.copyWith(
+        color: colorScheme.onSurface,
+        fontSize: 17,
+        fontWeight: FontWeight.w600,
+      ),
+      titleSmall: base.titleSmall?.copyWith(
+        color: colorScheme.onSurface,
+        fontSize: 14,
+        fontWeight: FontWeight.w600,
+      ),
+      bodyLarge: base.bodyLarge?.copyWith(
+        color: colorScheme.onSurface,
+        fontSize: 15,
+      ),
+      bodyMedium: base.bodyMedium?.copyWith(
+        color: colorScheme.onSurface.withValues(alpha: 0.75),
+        fontSize: 13,
+      ),
+      bodySmall: base.bodySmall?.copyWith(
+        color: colorScheme.onSurface.withValues(alpha: 0.55),
+        fontSize: 12,
+      ),
+      labelLarge: base.labelLarge?.copyWith(
+        fontWeight: FontWeight.w600,
+        fontSize: 14,
+      ),
     );
   }
 
@@ -105,7 +154,10 @@ class AppTheme {
     );
   }
 
-  static ThemeData _buildBaseTheme(ColorScheme colorScheme, {required bool isDark}) {
+  static ThemeData _buildBaseTheme(
+    ColorScheme colorScheme, {
+    required bool isDark,
+  }) {
     final textTheme = _buildTextTheme(colorScheme);
 
     return ThemeData(
@@ -113,7 +165,9 @@ class AppTheme {
       brightness: isDark ? Brightness.dark : Brightness.light,
       colorScheme: colorScheme,
       textTheme: textTheme,
-      scaffoldBackgroundColor: isDark ? AppColors.scaffoldDark : AppColors.scaffoldLight,
+      scaffoldBackgroundColor: isDark
+          ? AppColors.scaffoldDark
+          : AppColors.scaffoldLight,
       appBarTheme: AppBarTheme(
         backgroundColor: isDark ? AppColors.surfaceDark : AppColors.surface,
         foregroundColor: colorScheme.onSurface,
@@ -140,31 +194,47 @@ class AppTheme {
         style: ElevatedButton.styleFrom(
           backgroundColor: colorScheme.primary,
           foregroundColor: colorScheme.onPrimary,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
           elevation: 0,
           padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 24),
-          textStyle: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14),
+          textStyle: GoogleFonts.poppins(
+            fontWeight: FontWeight.w600,
+            fontSize: 14,
+          ),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: colorScheme.primary,
           side: BorderSide(color: colorScheme.primary.withValues(alpha: 0.5)),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
           padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 20),
-          textStyle: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14),
+          textStyle: GoogleFonts.poppins(
+            fontWeight: FontWeight.w600,
+            fontSize: 14,
+          ),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: colorScheme.primary,
-          textStyle: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14),
+          textStyle: GoogleFonts.poppins(
+            fontWeight: FontWeight.w600,
+            fontSize: 14,
+          ),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: isDark ? const Color(0xFF1A2A40) : AppColors.grey100,
-        contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 18),
+        contentPadding: const EdgeInsets.symmetric(
+          vertical: 16,
+          horizontal: 18,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide.none,
@@ -172,7 +242,9 @@ class AppTheme {
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide(
-            color: isDark ? Colors.white.withValues(alpha: 0.08) : AppColors.grey200,
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.08)
+                : AppColors.grey200,
             width: 1,
           ),
         ),
@@ -201,10 +273,15 @@ class AppTheme {
       ),
       chipTheme: ChipThemeData(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        labelStyle: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w500),
+        labelStyle: GoogleFonts.poppins(
+          fontSize: 13,
+          fontWeight: FontWeight.w500,
+        ),
       ),
       dividerTheme: DividerThemeData(
-        color: isDark ? Colors.white.withValues(alpha: 0.08) : AppColors.grey200,
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.08)
+            : AppColors.grey200,
         space: 1,
         thickness: 1,
       ),
@@ -220,13 +297,17 @@ class AppTheme {
           return GoogleFonts.poppins(
             fontSize: 11,
             fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-            color: isSelected ? colorScheme.primary : colorScheme.onSurface.withValues(alpha: 0.6),
+            color: isSelected
+                ? colorScheme.primary
+                : colorScheme.onSurface.withValues(alpha: 0.6),
           );
         }),
         iconTheme: WidgetStateProperty.resolveWith((states) {
           final isSelected = states.contains(WidgetState.selected);
           return IconThemeData(
-            color: isSelected ? colorScheme.primary : colorScheme.onSurface.withValues(alpha: 0.55),
+            color: isSelected
+                ? colorScheme.primary
+                : colorScheme.onSurface.withValues(alpha: 0.55),
             size: 24,
           );
         }),
@@ -244,7 +325,10 @@ class AppTheme {
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         backgroundColor: isDark ? const Color(0xFF1E3A5F) : AppColors.navy,
-        contentTextStyle: GoogleFonts.poppins(color: Colors.white, fontSize: 13),
+        contentTextStyle: GoogleFonts.poppins(
+          color: Colors.white,
+          fontSize: 13,
+        ),
       ),
       dialogTheme: DialogThemeData(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -258,6 +342,12 @@ class AppTheme {
     );
   }
 
-  static final ThemeData lightTheme = _buildBaseTheme(_buildLightScheme(), isDark: false);
-  static final ThemeData darkTheme = _buildBaseTheme(_buildDarkScheme(), isDark: true);
+  static final ThemeData lightTheme = _buildBaseTheme(
+    _buildLightScheme(),
+    isDark: false,
+  );
+  static final ThemeData darkTheme = _buildBaseTheme(
+    _buildDarkScheme(),
+    isDark: true,
+  );
 }

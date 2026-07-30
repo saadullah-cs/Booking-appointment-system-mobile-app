@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../shared/widgets/premium_card.dart';
 import '../../../services/app_preferences.dart';
@@ -16,7 +15,8 @@ class StaffLoginScreen extends ConsumerStatefulWidget {
   ConsumerState<StaffLoginScreen> createState() => _StaffLoginScreenState();
 }
 
-class _StaffLoginScreenState extends ConsumerState<StaffLoginScreen> with SingleTickerProviderStateMixin {
+class _StaffLoginScreenState extends ConsumerState<StaffLoginScreen>
+    with SingleTickerProviderStateMixin {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
@@ -53,7 +53,10 @@ class _StaffLoginScreenState extends ConsumerState<StaffLoginScreen> with Single
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(msg, style: GoogleFonts.poppins(fontWeight: FontWeight.w500)),
+        content: Text(
+          msg,
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w500),
+        ),
         backgroundColor: isError ? Colors.redAccent : AppColors.primary,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -83,9 +86,13 @@ class _StaffLoginScreenState extends ConsumerState<StaffLoginScreen> with Single
         final prefs = await AppPreferences.instance.prefs;
         await prefs.setBool('is_staff_logged_in', true);
         await prefs.setString('logged_in_staff_email', email);
-        await prefs.setString('offline_password_$email', password); // cache offline password
+        await prefs.setString(
+          'offline_password_$email',
+          password,
+        ); // cache offline password
 
-        final staffPinEnabled = prefs.getBool('staff_pin_enabled_$email') ?? false;
+        final staffPinEnabled =
+            prefs.getBool('staff_pin_enabled_$email') ?? false;
 
         _showSnackBar('Welcome to the Staff Portal! 🎉');
         if (!mounted) return;
@@ -102,7 +109,8 @@ class _StaffLoginScreenState extends ConsumerState<StaffLoginScreen> with Single
           await prefs.setBool('is_staff_logged_in', true);
           await prefs.setString('logged_in_staff_email', email);
 
-          final staffPinEnabled = prefs.getBool('staff_pin_enabled_$email') ?? false;
+          final staffPinEnabled =
+              prefs.getBool('staff_pin_enabled_$email') ?? false;
 
           _showSnackBar('Logged in via offline cache.');
           if (!mounted) return;
@@ -112,7 +120,10 @@ class _StaffLoginScreenState extends ConsumerState<StaffLoginScreen> with Single
             context.go('/staff-dashboard');
           }
         } else {
-          _showSnackBar('Invalid email or password. Please verify with doctor.', isError: true);
+          _showSnackBar(
+            'Invalid email or password. Please verify with doctor.',
+            isError: true,
+          );
         }
       }
     } catch (e) {
@@ -175,7 +186,9 @@ class _StaffLoginScreenState extends ConsumerState<StaffLoginScreen> with Single
                 height: size.width * 0.8,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: AppColors.accent.withValues(alpha: isDark ? 0.08 : 0.05),
+                  color: AppColors.accent.withValues(
+                    alpha: isDark ? 0.08 : 0.05,
+                  ),
                 ),
               ),
             ),
@@ -183,7 +196,10 @@ class _StaffLoginScreenState extends ConsumerState<StaffLoginScreen> with Single
             SafeArea(
               child: Center(
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 20,
+                  ),
                   child: FadeTransition(
                     opacity: _fadeAnim,
                     child: ScaleTransition(
@@ -195,17 +211,21 @@ class _StaffLoginScreenState extends ConsumerState<StaffLoginScreen> with Single
                           Container(
                             padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
-                              color: isDark ? Colors.white.withValues(alpha: 0.08) : cs.primary.withValues(alpha: 0.08),
+                              color: isDark
+                                  ? Colors.white.withValues(alpha: 0.08)
+                                  : cs.primary.withValues(alpha: 0.08),
                               borderRadius: BorderRadius.circular(24),
                               border: Border.all(
-                                color: isDark ? Colors.white.withValues(alpha: 0.15) : cs.primary.withValues(alpha: 0.15),
+                                color: isDark
+                                    ? Colors.white.withValues(alpha: 0.15)
+                                    : cs.primary.withValues(alpha: 0.15),
                               ),
                             ),
                             child: Image.asset(
                               'assets/ChatGPT Image Jul 9, 2025, 11_09_56 PM.png',
                               width: 60,
                               height: 60,
-                              errorBuilder: (_, __, ___) => Icon(
+                              errorBuilder: (_, _, _) => Icon(
                                 Icons.badge_rounded,
                                 color: cs.primary,
                                 size: 50,
@@ -255,7 +275,9 @@ class _StaffLoginScreenState extends ConsumerState<StaffLoginScreen> with Single
                                     'Enter credentials assigned by your Clinic Administrator.',
                                     style: GoogleFonts.poppins(
                                       fontSize: 11.5,
-                                      color: cs.onSurface.withValues(alpha: 0.65),
+                                      color: cs.onSurface.withValues(
+                                        alpha: 0.65,
+                                      ),
                                     ),
                                     textAlign: TextAlign.center,
                                   ),
@@ -288,12 +310,19 @@ class _StaffLoginScreenState extends ConsumerState<StaffLoginScreen> with Single
                                     obscureText: _obscurePassword,
                                     decoration: InputDecoration(
                                       labelText: 'Access Password',
-                                      prefixIcon: const Icon(Icons.lock_outline_rounded),
+                                      prefixIcon: const Icon(
+                                        Icons.lock_outline_rounded,
+                                      ),
                                       suffixIcon: IconButton(
                                         icon: Icon(
-                                          _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                                          _obscurePassword
+                                              ? Icons.visibility_off_outlined
+                                              : Icons.visibility_outlined,
                                         ),
-                                        onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                                        onPressed: () => setState(
+                                          () => _obscurePassword =
+                                              !_obscurePassword,
+                                        ),
                                       ),
                                     ),
                                     validator: (val) {
@@ -310,18 +339,29 @@ class _StaffLoginScreenState extends ConsumerState<StaffLoginScreen> with Single
 
                                   // Submit button
                                   _isLoading
-                                      ? Center(child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation(cs.primary)))
+                                      ? Center(
+                                          child: CircularProgressIndicator(
+                                            valueColor: AlwaysStoppedAnimation(
+                                              cs.primary,
+                                            ),
+                                          ),
+                                        )
                                       : ElevatedButton(
                                           onPressed: _login,
                                           style: ElevatedButton.styleFrom(
                                             backgroundColor: cs.primary,
                                             foregroundColor: cs.onPrimary,
                                             shape: RoundedRectangleBorder(
-                                              borderRadius: BorderRadius.circular(16),
+                                              borderRadius:
+                                                  BorderRadius.circular(16),
                                             ),
-                                            padding: const EdgeInsets.symmetric(vertical: 16),
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 16,
+                                            ),
                                             elevation: 8,
-                                            shadowColor: cs.primary.withValues(alpha: 0.3),
+                                            shadowColor: cs.primary.withValues(
+                                              alpha: 0.3,
+                                            ),
                                           ),
                                           child: Text(
                                             'Sign In as Staff',
@@ -341,7 +381,11 @@ class _StaffLoginScreenState extends ConsumerState<StaffLoginScreen> with Single
                           // Back button
                           TextButton.icon(
                             onPressed: () => context.go('/login'),
-                            icon: Icon(Icons.arrow_back_rounded, color: cs.onSurface.withValues(alpha: 0.7), size: 16),
+                            icon: Icon(
+                              Icons.arrow_back_rounded,
+                              color: cs.onSurface.withValues(alpha: 0.7),
+                              size: 16,
+                            ),
                             label: Text(
                               'Return to Doctor Portal',
                               style: GoogleFonts.poppins(

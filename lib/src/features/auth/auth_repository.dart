@@ -30,14 +30,21 @@ class AuthRepository {
 
   void _startSessionValidationTimer() {
     _sessionValidationTimer?.cancel();
-    _sessionValidationTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
+    _sessionValidationTimer = Timer.periodic(const Duration(seconds: 5), (
+      timer,
+    ) async {
       try {
-        if (Firebase.apps.isNotEmpty && FirebaseAuth.instance.currentUser != null) {
+        if (Firebase.apps.isNotEmpty &&
+            FirebaseAuth.instance.currentUser != null) {
           try {
             await FirebaseAuth.instance.currentUser!.reload();
           } on FirebaseAuthException catch (e) {
-            debugPrint('Periodic Firebase session check failed (code: ${e.code})');
-            if (e.code == 'user-not-found' || e.code == 'user-disabled' || e.code == 'invalid-credential') {
+            debugPrint(
+              'Periodic Firebase session check failed (code: ${e.code})',
+            );
+            if (e.code == 'user-not-found' ||
+                e.code == 'user-disabled' ||
+                e.code == 'invalid-credential') {
               await signOut();
             }
           }
@@ -98,7 +105,8 @@ class AuthRepository {
         final user = AppUser(
           uid: firebaseUser.uid,
           email: firebaseUser.email ?? '',
-          displayName: firebaseUser.displayName ?? firebaseUser.email ?? 'Patient',
+          displayName:
+              firebaseUser.displayName ?? firebaseUser.email ?? 'Patient',
           phoneNumber: firebaseUser.phoneNumber ?? '',
         );
 
@@ -117,7 +125,8 @@ class AuthRepository {
       return AppUser(
         uid: firebaseUser.uid,
         email: firebaseUser.email ?? '',
-        displayName: firebaseUser.displayName ?? firebaseUser.email ?? 'Patient',
+        displayName:
+            firebaseUser.displayName ?? firebaseUser.email ?? 'Patient',
         phoneNumber: firebaseUser.phoneNumber ?? '',
       );
     }
@@ -132,7 +141,9 @@ class AuthRepository {
     if (usersJson != null) {
       final decoded = jsonDecode(usersJson) as Map<String, dynamic>;
       for (final entry in decoded.entries) {
-        registeredUsers[entry.key] = Map<String, dynamic>.from(entry.value as Map);
+        registeredUsers[entry.key] = Map<String, dynamic>.from(
+          entry.value as Map,
+        );
       }
     }
 
@@ -142,8 +153,9 @@ class AuthRepository {
       throw Exception('Invalid credentials');
     }
 
-    final user = AppUser.fromJson(Map<String, dynamic>.from(storedUser)
-      ..remove('password'));
+    final user = AppUser.fromJson(
+      Map<String, dynamic>.from(storedUser)..remove('password'),
+    );
     await _persistUser(user, prefs);
     return user;
   }
@@ -154,22 +166,21 @@ class AuthRepository {
   }) async {
     if (await _ensureFirebaseInitialized()) {
       try {
-        final credentials = await FirebaseAuth.instance.signInWithEmailAndPassword(
-          email: email,
-          password: password,
-        );
+        final credentials = await FirebaseAuth.instance
+            .signInWithEmailAndPassword(email: email, password: password);
         final firebaseUser = credentials.user!;
         final user = AppUser(
           uid: firebaseUser.uid,
           email: firebaseUser.email ?? '',
-          displayName: firebaseUser.displayName ?? firebaseUser.email ?? 'Patient',
+          displayName:
+              firebaseUser.displayName ?? firebaseUser.email ?? 'Patient',
           phoneNumber: firebaseUser.phoneNumber ?? '',
         );
-        
+
         final prefs = await _prefsFuture;
         await _persistUser(user, prefs);
         await _saveUserLocally(email, password, user);
-        
+
         return user;
       } on FirebaseAuthException catch (error) {
         debugPrint('Firebase sign-in failed (code: ${error.code})');
@@ -195,10 +206,8 @@ class AuthRepository {
   }) async {
     if (await _ensureFirebaseInitialized()) {
       try {
-        final credentials = await FirebaseAuth.instance.createUserWithEmailAndPassword(
-          email: email,
-          password: password,
-        );
+        final credentials = await FirebaseAuth.instance
+            .createUserWithEmailAndPassword(email: email, password: password);
 
         final firebaseUser = credentials.user!;
         final displayName = name.trim().isEmpty ? 'Patient' : name.trim();
@@ -216,7 +225,9 @@ class AuthRepository {
       } on FirebaseAuthException catch (error) {
         throw Exception(error.message ?? 'Firebase registration failed');
       } catch (error) {
-        debugPrint('Firebase registration failed, falling back to local register: $error');
+        debugPrint(
+          'Firebase registration failed, falling back to local register: $error',
+        );
       }
     }
 
@@ -227,7 +238,9 @@ class AuthRepository {
     if (usersJson != null) {
       final decoded = jsonDecode(usersJson) as Map<String, dynamic>;
       for (final entry in decoded.entries) {
-        registeredUsers[entry.key] = Map<String, dynamic>.from(entry.value as Map);
+        registeredUsers[entry.key] = Map<String, dynamic>.from(
+          entry.value as Map,
+        );
       }
     }
 
@@ -243,10 +256,7 @@ class AuthRepository {
       phoneNumber: '',
     );
 
-    registeredUsers[normalizedEmail] = {
-      ...user.toJson(),
-      'password': password,
-    };
+    registeredUsers[normalizedEmail] = {...user.toJson(), 'password': password};
     await prefs.setString(_usersKey, jsonEncode(registeredUsers));
     await _persistUser(user, prefs);
     return user;
@@ -279,12 +289,15 @@ class AuthRepository {
           accessToken: googleAuth.accessToken,
         );
 
-        final signInResult = await FirebaseAuth.instance.signInWithCredential(credential);
+        final signInResult = await FirebaseAuth.instance.signInWithCredential(
+          credential,
+        );
         final firebaseUser = signInResult.user!;
         final user = AppUser(
           uid: firebaseUser.uid,
           email: firebaseUser.email ?? '',
-          displayName: firebaseUser.displayName ?? firebaseUser.email ?? 'Google User',
+          displayName:
+              firebaseUser.displayName ?? firebaseUser.email ?? 'Google User',
           phoneNumber: firebaseUser.phoneNumber ?? '',
         );
         await _persistUser(user, await _prefsFuture);
@@ -328,7 +341,8 @@ class AuthRepository {
     final cleanName = newName.trim();
     if (cleanName.isEmpty) return;
 
-    if (await _ensureFirebaseInitialized() && FirebaseAuth.instance.currentUser != null) {
+    if (await _ensureFirebaseInitialized() &&
+        FirebaseAuth.instance.currentUser != null) {
       try {
         await FirebaseAuth.instance.currentUser!.updateDisplayName(cleanName);
         await FirebaseAuth.instance.currentUser!.reload();
@@ -349,7 +363,9 @@ class AuthRepository {
           final decoded = jsonDecode(usersJson) as Map<String, dynamic>;
           final normalizedEmail = updatedUser.email.toLowerCase();
           if (decoded.containsKey(normalizedEmail)) {
-            final userMap = Map<String, dynamic>.from(decoded[normalizedEmail] as Map);
+            final userMap = Map<String, dynamic>.from(
+              decoded[normalizedEmail] as Map,
+            );
             userMap['displayName'] = cleanName;
             decoded[normalizedEmail] = userMap;
             await prefs.setString(_usersKey, jsonEncode(decoded));
@@ -371,7 +387,8 @@ class AuthRepository {
       final user = AppUser(
         uid: firebaseUser.uid,
         email: firebaseUser.email ?? '',
-        displayName: firebaseUser.displayName ?? firebaseUser.email ?? 'Patient',
+        displayName:
+            firebaseUser.displayName ?? firebaseUser.email ?? 'Patient',
         phoneNumber: firebaseUser.phoneNumber ?? '',
       );
       _cachedUser = user;
@@ -385,13 +402,18 @@ class AuthRepository {
       return null;
     }
 
-    final user = AppUser.fromJson(jsonDecode(storedUser) as Map<String, dynamic>);
+    final user = AppUser.fromJson(
+      jsonDecode(storedUser) as Map<String, dynamic>,
+    );
     // If Firebase is enabled, but we are not logged into Firebase,
     // and the stored user is not one of our predefined local fallback accounts,
     // then this stored session is invalid (the Firebase user is signed out/deleted).
     if (_firebaseEnabled && FirebaseAuth.instance.currentUser == null) {
       final email = user.email.toLowerCase();
-      final isLocalFallback = email == 'drbashir@gct.com' || email == 'bashir@gmail.com' || email == 'khan@gmail.com';
+      final isLocalFallback =
+          email == 'drbashir@gct.com' ||
+          email == 'bashir@gmail.com' ||
+          email == 'khan@gmail.com';
       if (!isLocalFallback) {
         await prefs.remove(_currentUserKey);
         _cachedUser = null;
@@ -403,25 +425,28 @@ class AuthRepository {
     return user;
   }
 
-  Future<void> _saveUserLocally(String email, String password, AppUser user) async {
+  Future<void> _saveUserLocally(
+    String email,
+    String password,
+    AppUser user,
+  ) async {
     final prefs = await _prefsFuture;
     final usersJson = prefs.getString(_usersKey);
     final registeredUsers = <String, Map<String, dynamic>>{};
-    
+
     if (usersJson != null) {
       try {
         final decoded = jsonDecode(usersJson) as Map<String, dynamic>;
         for (final entry in decoded.entries) {
-          registeredUsers[entry.key] = Map<String, dynamic>.from(entry.value as Map);
+          registeredUsers[entry.key] = Map<String, dynamic>.from(
+            entry.value as Map,
+          );
         }
       } catch (_) {}
     }
-    
+
     final normalizedEmail = email.trim().toLowerCase();
-    registeredUsers[normalizedEmail] = {
-      ...user.toJson(),
-      'password': password,
-    };
+    registeredUsers[normalizedEmail] = {...user.toJson(), 'password': password};
     await prefs.setString(_usersKey, jsonEncode(registeredUsers));
   }
 
@@ -429,16 +454,18 @@ class AuthRepository {
     final prefs = await _prefsFuture;
     final usersJson = prefs.getString(_usersKey);
     final registeredUsers = <String, Map<String, dynamic>>{};
-    
+
     if (usersJson != null) {
       try {
         final decoded = jsonDecode(usersJson) as Map<String, dynamic>;
         for (final entry in decoded.entries) {
-          registeredUsers[entry.key] = Map<String, dynamic>.from(entry.value as Map);
+          registeredUsers[entry.key] = Map<String, dynamic>.from(
+            entry.value as Map,
+          );
         }
       } catch (_) {}
     }
-    
+
     // Ensure default doctor is registered
     if (!registeredUsers.containsKey('drbashir@gct.com')) {
       final defaultDoctor = AppUser(
@@ -452,7 +479,7 @@ class AuthRepository {
         'password': 'password123',
       };
     }
-    
+
     // Also ensure bashir@gmail.com is registered locally as fallback
     if (!registeredUsers.containsKey('bashir@gmail.com')) {
       final gmailDoctor = AppUser(
@@ -466,7 +493,7 @@ class AuthRepository {
         'password': 'password123',
       };
     }
-    
+
     // Also ensure khan@gmail.com is registered locally as fallback
     if (!registeredUsers.containsKey('khan@gmail.com')) {
       final khanUser = AppUser(
@@ -529,7 +556,9 @@ class AuthRepository {
   Future<List<Map<String, String>>> loadStaffCredentials() async {
     if (await _ensureFirebaseInitialized()) {
       try {
-        final snapshot = await FirebaseFirestore.instance.collection('staff').get();
+        final snapshot = await FirebaseFirestore.instance
+            .collection('staff')
+            .get();
         final list = snapshot.docs.map((doc) {
           final data = doc.data();
           return {
@@ -572,9 +601,9 @@ class AuthRepository {
             .collection('staff')
             .doc(normalizedEmail)
             .set({
-          'password': password,
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
+              'password': password,
+              'updatedAt': FieldValue.serverTimestamp(),
+            });
       } catch (e) {
         debugPrint('Failed to save staff credential online: $e');
       }

@@ -35,6 +35,11 @@ class Appointment {
   final String patientImprovement;
   final String posturalPhotoPath;
 
+  // Payment Tracking
+  final String paymentMethod; // 'online' | 'cash'
+  final String paymentStatus; // 'paid' | 'pending'
+  final double amount;
+
   Appointment({
     required this.id,
     required this.patientName,
@@ -63,6 +68,9 @@ class Appointment {
     this.adjustmentTechnique = '',
     this.patientImprovement = '',
     this.posturalPhotoPath = '',
+    this.paymentMethod = 'cash',
+    this.paymentStatus = 'pending',
+    this.amount = 0.0,
   });
 
   factory Appointment.fromJson(Map<String, dynamic> json) {
@@ -81,19 +89,32 @@ class Appointment {
       updatedAt: DateTime.tryParse(json['updatedAt']?.toString() ?? ''),
       isEmergency: json['isEmergency'] == true || json['isEmergency'] == 'true',
       patientProfession: json['patientProfession']?.toString() ?? '',
-      painLevel: json['painLevel'] != null ? int.tryParse(json['painLevel'].toString()) : null,
+      painLevel: json['painLevel'] != null
+          ? int.tryParse(json['painLevel'].toString())
+          : null,
       bloodPressure: json['bloodPressure']?.toString() ?? '',
-      pulseRate: json['pulseRate'] != null ? int.tryParse(json['pulseRate'].toString()) : null,
+      pulseRate: json['pulseRate'] != null
+          ? int.tryParse(json['pulseRate'].toString())
+          : null,
       adjustedSegments: json['adjustedSegments']?.toString() ?? '',
       prescribedExercises: json['prescribedExercises']?.toString() ?? '',
       nextFollowUp: json['nextFollowUp']?.toString() ?? '',
-      treatmentPlanTotalSessions: json['treatmentPlanTotalSessions'] != null ? int.tryParse(json['treatmentPlanTotalSessions'].toString()) : null,
-      sessionNumber: json['sessionNumber'] != null ? int.tryParse(json['sessionNumber'].toString()) : null,
-      durationMinutes: json['durationMinutes'] != null ? int.tryParse(json['durationMinutes'].toString()) ?? 40 : 40,
+      treatmentPlanTotalSessions: json['treatmentPlanTotalSessions'] != null
+          ? int.tryParse(json['treatmentPlanTotalSessions'].toString())
+          : null,
+      sessionNumber: json['sessionNumber'] != null
+          ? int.tryParse(json['sessionNumber'].toString())
+          : null,
+      durationMinutes: json['durationMinutes'] != null
+          ? int.tryParse(json['durationMinutes'].toString()) ?? 40
+          : 40,
       dateOfBirth: DateTime.tryParse(json['dateOfBirth']?.toString() ?? ''),
       adjustmentTechnique: json['adjustmentTechnique']?.toString() ?? '',
       patientImprovement: json['patientImprovement']?.toString() ?? '',
       posturalPhotoPath: json['posturalPhotoPath']?.toString() ?? '',
+      paymentMethod: json['paymentMethod']?.toString() ?? 'cash',
+      paymentStatus: json['paymentStatus']?.toString() ?? 'pending',
+      amount: (json['amount'] as num?)?.toDouble() ?? 0.0,
     );
   }
 
@@ -126,6 +147,9 @@ class Appointment {
       'adjustmentTechnique': adjustmentTechnique,
       'patientImprovement': patientImprovement,
       'posturalPhotoPath': posturalPhotoPath,
+      'paymentMethod': paymentMethod,
+      'paymentStatus': paymentStatus,
+      'amount': amount,
     };
   }
 
@@ -156,6 +180,9 @@ class Appointment {
     String? adjustmentTechnique,
     String? patientImprovement,
     String? posturalPhotoPath,
+    String? paymentMethod,
+    String? paymentStatus,
+    double? amount,
   }) {
     return Appointment(
       id: id,
@@ -178,13 +205,17 @@ class Appointment {
       adjustedSegments: adjustedSegments ?? this.adjustedSegments,
       prescribedExercises: prescribedExercises ?? this.prescribedExercises,
       nextFollowUp: nextFollowUp ?? this.nextFollowUp,
-      treatmentPlanTotalSessions: treatmentPlanTotalSessions ?? this.treatmentPlanTotalSessions,
+      treatmentPlanTotalSessions:
+          treatmentPlanTotalSessions ?? this.treatmentPlanTotalSessions,
       sessionNumber: sessionNumber ?? this.sessionNumber,
       durationMinutes: durationMinutes ?? this.durationMinutes,
       dateOfBirth: dateOfBirth ?? this.dateOfBirth,
       adjustmentTechnique: adjustmentTechnique ?? this.adjustmentTechnique,
       patientImprovement: patientImprovement ?? this.patientImprovement,
       posturalPhotoPath: posturalPhotoPath ?? this.posturalPhotoPath,
+      paymentMethod: paymentMethod ?? this.paymentMethod,
+      paymentStatus: paymentStatus ?? this.paymentStatus,
+      amount: amount ?? this.amount,
     );
   }
 }

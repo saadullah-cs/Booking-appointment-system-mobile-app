@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../models/appointment.dart';
 import '../../services/app_preferences.dart';
 import '../../services/notification_service.dart';
+import '../../services/payment_gateway_service.dart';
 import '../../theme/app_theme.dart';
 import '../shared/widgets/premium_card.dart';
 
@@ -16,7 +17,8 @@ class StaffDashboardScreen extends ConsumerStatefulWidget {
   const StaffDashboardScreen({super.key});
 
   @override
-  ConsumerState<StaffDashboardScreen> createState() => _StaffDashboardScreenState();
+  ConsumerState<StaffDashboardScreen> createState() =>
+      _StaffDashboardScreenState();
 }
 
 class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
@@ -51,7 +53,10 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(msg, style: GoogleFonts.poppins(fontWeight: FontWeight.w500)),
+        content: Text(
+          msg,
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w500),
+        ),
         backgroundColor: isError ? Colors.redAccent : AppColors.primary,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -103,6 +108,47 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
     }
   }
 
+  Future<void> _retryPayment(Appointment apt) async {
+    final payService = PaymentGatewayService();
+    try {
+      final res = await payService.initializeSafepayTransaction(
+        amount: apt.amount,
+        currency: 'PKR',
+        customerEmail: apt.email,
+      );
+
+      if (payService.safepayKey.isEmpty ||
+          payService.safepayKey.contains('your_safepay_api_key')) {
+        if (mounted) {
+          await showDialog(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Payment Gateway - Test Mode'),
+              content: const Text(
+                'The online payment gateway is currently in Test Mode (Key unconfigured in .env). '
+                'In production, this would launch the secure Safepay/PayFast checkout screen.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Continue with Simulation'),
+                ),
+              ],
+            ),
+          );
+        }
+      } else {
+        final url = Uri.parse(res['checkoutUrl'] ?? '');
+        if (await canLaunchUrl(url)) {
+          await launchUrl(url, mode: LaunchMode.externalApplication);
+        }
+      }
+    } catch (e) {
+      debugPrint('Retry Payment failed: $e');
+      _showSnackBar('Payment initialization failed: $e', isError: true);
+    }
+  }
+
   String get _greeting {
     final h = DateTime.now().hour;
     if (h < 12) return 'Good morning';
@@ -114,8 +160,22 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('$_greeting,', style: GoogleFonts.poppins(fontSize: 13, color: cs.onSurface.withValues(alpha: 0.55))),
-        Text('Staff Member', style: GoogleFonts.poppins(fontSize: 22, fontWeight: FontWeight.w800, color: cs.onSurface, letterSpacing: -0.5)),
+        Text(
+          '$_greeting,',
+          style: GoogleFonts.poppins(
+            fontSize: 13,
+            color: cs.onSurface.withValues(alpha: 0.55),
+          ),
+        ),
+        Text(
+          'Staff Member',
+          style: GoogleFonts.poppins(
+            fontSize: 22,
+            fontWeight: FontWeight.w800,
+            color: cs.onSurface,
+            letterSpacing: -0.5,
+          ),
+        ),
       ],
     );
   }
@@ -161,11 +221,18 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
           const SizedBox(height: 12),
           Text(
             'Signed in as:',
-            style: GoogleFonts.poppins(fontSize: 11, color: cs.onSurface.withValues(alpha: 0.5)),
+            style: GoogleFonts.poppins(
+              fontSize: 11,
+              color: cs.onSurface.withValues(alpha: 0.5),
+            ),
           ),
           Text(
             _staffEmail,
-            style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.bold, color: cs.primary),
+            style: GoogleFonts.poppins(
+              fontSize: 13,
+              fontWeight: FontWeight.bold,
+              color: cs.primary,
+            ),
             overflow: TextOverflow.ellipsis,
           ),
         ],
@@ -180,14 +247,26 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
         children: [
           Text(
             'Clinic Info',
-            style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w700, color: cs.onSurface),
+            style: GoogleFonts.poppins(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: cs.onSurface,
+            ),
           ),
           const SizedBox(height: 12),
-          _buildMiniInfoRow(Icons.location_on_rounded, 'Sector G-8/4, Islamabad', cs),
+          _buildMiniInfoRow(
+            Icons.location_on_rounded,
+            'Sector G-8/4, Islamabad',
+            cs,
+          ),
           const SizedBox(height: 8),
           _buildMiniInfoRow(Icons.phone_rounded, '+92 300 1234567', cs),
           const SizedBox(height: 8),
-          _buildMiniInfoRow(Icons.access_time_filled_rounded, '9:00 AM - 6:00 PM', cs),
+          _buildMiniInfoRow(
+            Icons.access_time_filled_rounded,
+            '9:00 AM - 6:00 PM',
+            cs,
+          ),
         ],
       ),
     );
@@ -201,7 +280,10 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
         Expanded(
           child: Text(
             text,
-            style: GoogleFonts.poppins(fontSize: 12, color: cs.onSurface.withValues(alpha: 0.7)),
+            style: GoogleFonts.poppins(
+              fontSize: 12,
+              color: cs.onSurface.withValues(alpha: 0.7),
+            ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -221,14 +303,21 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
               const SizedBox(width: 8),
               Text(
                 'Clinic Chat',
-                style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w700, color: cs.onSurface),
+                style: GoogleFonts.poppins(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: cs.onSurface,
+                ),
               ),
             ],
           ),
           const SizedBox(height: 8),
           Text(
             'Need to coordinate or send a message to the clinic doctor?',
-            style: GoogleFonts.poppins(fontSize: 11.5, color: cs.onSurface.withValues(alpha: 0.6)),
+            style: GoogleFonts.poppins(
+              fontSize: 11.5,
+              color: cs.onSurface.withValues(alpha: 0.6),
+            ),
           ),
           const SizedBox(height: 12),
           SizedBox(
@@ -236,10 +325,18 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
             child: ElevatedButton.icon(
               onPressed: () => context.push('/chat'),
               icon: const Icon(Icons.chat_bubble_outline_rounded, size: 16),
-              label: Text('Open Group Chat', style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold)),
+              label: Text(
+                'Open Group Chat',
+                style: GoogleFonts.poppins(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 10),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
               ),
             ),
           ),
@@ -259,14 +356,21 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
               const SizedBox(width: 8),
               Text(
                 'AI Patient Analyzer',
-                style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w700, color: cs.onSurface),
+                style: GoogleFonts.poppins(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: cs.onSurface,
+                ),
               ),
             ],
           ),
           const SizedBox(height: 8),
           Text(
             'Analyze patient posture, gait mechanics, facial paralysis, or skin lesions using live camera scan or photo uploads.',
-            style: GoogleFonts.poppins(fontSize: 11.5, color: cs.onSurface.withValues(alpha: 0.6)),
+            style: GoogleFonts.poppins(
+              fontSize: 11.5,
+              color: cs.onSurface.withValues(alpha: 0.6),
+            ),
           ),
           const SizedBox(height: 12),
           SizedBox(
@@ -274,10 +378,18 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
             child: ElevatedButton.icon(
               onPressed: () => context.push('/vision-analyzer'),
               icon: const Icon(Icons.document_scanner_rounded, size: 16),
-              label: Text('Open Vision Analyzer', style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold)),
+              label: Text(
+                'Open Vision Analyzer',
+                style: GoogleFonts.poppins(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 10),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
               ),
             ),
           ),
@@ -293,7 +405,9 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
       backgroundColor: Colors.transparent,
       builder: (context) {
         final formattedDate = apt.scheduledAt != null
-            ? DateFormat('EEEE, MMMM dd, yyyy').format(apt.scheduledAt!.toLocal())
+            ? DateFormat(
+                'EEEE, MMMM dd, yyyy',
+              ).format(apt.scheduledAt!.toLocal())
             : 'Unscheduled';
         final formattedTime = apt.scheduledAt != null
             ? DateFormat('hh:mm a').format(apt.scheduledAt!.toLocal())
@@ -309,7 +423,7 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
                 color: Colors.black.withValues(alpha: 0.15),
                 blurRadius: 20,
                 spreadRadius: 5,
-              )
+              ),
             ],
           ),
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
@@ -344,7 +458,10 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       color: statusBgColor(apt.status),
                       borderRadius: BorderRadius.circular(12),
@@ -373,14 +490,30 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
               const Divider(height: 32),
 
               // Info grid
-              _buildDetailItem(Icons.calendar_month_outlined, 'Scheduled Date', formattedDate),
+              _buildDetailItem(
+                Icons.calendar_month_outlined,
+                'Scheduled Date',
+                formattedDate,
+              ),
               const SizedBox(height: 16),
-              _buildDetailItem(Icons.access_time_rounded, 'Appointment Time', formattedTime),
+              _buildDetailItem(
+                Icons.access_time_rounded,
+                'Appointment Time',
+                formattedTime,
+              ),
               const SizedBox(height: 16),
-              _buildDetailItem(Icons.phone_iphone_rounded, 'Contact Phone', apt.phoneNumber),
+              _buildDetailItem(
+                Icons.phone_iphone_rounded,
+                'Contact Phone',
+                apt.phoneNumber,
+              ),
               if (apt.patientNote.isNotEmpty) ...[
                 const SizedBox(height: 16),
-                _buildDetailItem(Icons.notes_rounded, 'Additional Notes', apt.patientNote),
+                _buildDetailItem(
+                  Icons.notes_rounded,
+                  'Additional Notes',
+                  apt.patientNote,
+                ),
               ],
               const Divider(height: 32),
 
@@ -478,12 +611,17 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
     return Container(
       height: 36,
       width: 1,
-      color: Colors.grey.withOpacity(0.2),
+      color: Colors.grey.withValues(alpha: 0.2),
       margin: const EdgeInsets.symmetric(horizontal: 12),
     );
   }
 
-  Widget _buildStatItemVertical(String label, String value, IconData icon, Color color) {
+  Widget _buildStatItemVertical(
+    String label,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
     final cs = Theme.of(context).colorScheme;
     return Expanded(
       child: Column(
@@ -492,7 +630,7 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+              color: color.withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
             child: Icon(icon, color: color, size: 20),
@@ -511,7 +649,7 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
             style: GoogleFonts.poppins(
               fontSize: 10,
               fontWeight: FontWeight.w600,
-              color: cs.onSurface.withOpacity(0.55),
+              color: cs.onSurface.withValues(alpha: 0.55),
             ),
           ),
         ],
@@ -526,14 +664,18 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
         width: 50,
         height: 50,
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.04),
+          color: Colors.white.withValues(alpha: 0.04),
           shape: BoxShape.circle,
           border: Border.all(color: Colors.white12, width: 1),
         ),
         alignment: Alignment.center,
         child: Text(
           label,
-          style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+          style: GoogleFonts.poppins(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
         ),
       ),
     );
@@ -579,7 +721,9 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
               setStatePin(() {
                 errorMessage = '';
                 if (!isConfirming) {
-                  if (pin1.isNotEmpty) pin1 = pin1.substring(0, pin1.length - 1);
+                  if (pin1.isNotEmpty) {
+                    pin1 = pin1.substring(0, pin1.length - 1);
+                  }
                 } else {
                   if (pin2.isNotEmpty) {
                     pin2 = pin2.substring(0, pin2.length - 1);
@@ -592,13 +736,19 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
             }
 
             final currentPinLength = isConfirming ? pin2.length : pin1.length;
-            final titleText = isConfirming ? 'Confirm New PIN' : 'Enter New PIN';
+            final titleText = isConfirming
+                ? 'Confirm New PIN'
+                : 'Enter New PIN';
 
             return AlertDialog(
               backgroundColor: const Color(0xFF1E293B),
               title: Text(
                 titleText,
-                style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                style: GoogleFonts.poppins(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
                 textAlign: TextAlign.center,
               ),
               content: Column(
@@ -614,8 +764,13 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
                         margin: const EdgeInsets.symmetric(horizontal: 8),
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: filled ? AppColors.primary : Colors.transparent,
-                          border: Border.all(color: AppColors.primary, width: 2),
+                          color: filled
+                              ? AppColors.primary
+                              : Colors.transparent,
+                          border: Border.all(
+                            color: AppColors.primary,
+                            width: 2,
+                          ),
                         ),
                       );
                     }),
@@ -624,7 +779,11 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
                     const SizedBox(height: 12),
                     Text(
                       errorMessage,
-                      style: GoogleFonts.poppins(color: Colors.redAccent, fontSize: 11, fontWeight: FontWeight.bold),
+                      style: GoogleFonts.poppins(
+                        color: Colors.redAccent,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ],
                   const SizedBox(height: 24),
@@ -632,17 +791,29 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
                     children: [
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: ['1', '2', '3'].map((d) => _buildDialogKey(d, onKeyTap)).toList(),
+                        children: [
+                          '1',
+                          '2',
+                          '3',
+                        ].map((d) => _buildDialogKey(d, onKeyTap)).toList(),
                       ),
                       const SizedBox(height: 10),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: ['4', '5', '6'].map((d) => _buildDialogKey(d, onKeyTap)).toList(),
+                        children: [
+                          '4',
+                          '5',
+                          '6',
+                        ].map((d) => _buildDialogKey(d, onKeyTap)).toList(),
                       ),
                       const SizedBox(height: 10),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: ['7', '8', '9'].map((d) => _buildDialogKey(d, onKeyTap)).toList(),
+                        children: [
+                          '7',
+                          '8',
+                          '9',
+                        ].map((d) => _buildDialogKey(d, onKeyTap)).toList(),
                       ),
                       const SizedBox(height: 10),
                       Row(
@@ -656,7 +827,11 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
                               width: 50,
                               height: 50,
                               alignment: Alignment.center,
-                              child: const Icon(Icons.backspace_outlined, color: Colors.white70, size: 18),
+                              child: const Icon(
+                                Icons.backspace_outlined,
+                                color: Colors.white70,
+                                size: 18,
+                              ),
                             ),
                           ),
                         ],
@@ -668,7 +843,10 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: Text('Cancel', style: GoogleFonts.poppins(color: Colors.white70)),
+                  child: Text(
+                    'Cancel',
+                    style: GoogleFonts.poppins(color: Colors.white70),
+                  ),
                 ),
               ],
             );
@@ -714,7 +892,11 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
               backgroundColor: const Color(0xFF1E293B),
               title: Text(
                 'Enter Current PIN',
-                style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                style: GoogleFonts.poppins(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
                 textAlign: TextAlign.center,
               ),
               content: Column(
@@ -730,8 +912,13 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
                         margin: const EdgeInsets.symmetric(horizontal: 8),
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: filled ? AppColors.primary : Colors.transparent,
-                          border: Border.all(color: AppColors.primary, width: 2),
+                          color: filled
+                              ? AppColors.primary
+                              : Colors.transparent,
+                          border: Border.all(
+                            color: AppColors.primary,
+                            width: 2,
+                          ),
                         ),
                       );
                     }),
@@ -740,7 +927,11 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
                     const SizedBox(height: 12),
                     Text(
                       errorMessage,
-                      style: GoogleFonts.poppins(color: Colors.redAccent, fontSize: 11, fontWeight: FontWeight.bold),
+                      style: GoogleFonts.poppins(
+                        color: Colors.redAccent,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ],
                   const SizedBox(height: 24),
@@ -748,17 +939,29 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
                     children: [
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: ['1', '2', '3'].map((d) => _buildDialogKey(d, onKeyTap)).toList(),
+                        children: [
+                          '1',
+                          '2',
+                          '3',
+                        ].map((d) => _buildDialogKey(d, onKeyTap)).toList(),
                       ),
                       const SizedBox(height: 10),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: ['4', '5', '6'].map((d) => _buildDialogKey(d, onKeyTap)).toList(),
+                        children: [
+                          '4',
+                          '5',
+                          '6',
+                        ].map((d) => _buildDialogKey(d, onKeyTap)).toList(),
                       ),
                       const SizedBox(height: 10),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: ['7', '8', '9'].map((d) => _buildDialogKey(d, onKeyTap)).toList(),
+                        children: [
+                          '7',
+                          '8',
+                          '9',
+                        ].map((d) => _buildDialogKey(d, onKeyTap)).toList(),
                       ),
                       const SizedBox(height: 10),
                       Row(
@@ -772,7 +975,11 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
                               width: 50,
                               height: 50,
                               alignment: Alignment.center,
-                              child: const Icon(Icons.backspace_outlined, color: Colors.white70, size: 18),
+                              child: const Icon(
+                                Icons.backspace_outlined,
+                                color: Colors.white70,
+                                size: 18,
+                              ),
                             ),
                           ),
                         ],
@@ -784,7 +991,10 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context, false),
-                  child: Text('Cancel', style: GoogleFonts.poppins(color: Colors.white70)),
+                  child: Text(
+                    'Cancel',
+                    style: GoogleFonts.poppins(color: Colors.white70),
+                  ),
                 ),
               ],
             );
@@ -813,7 +1023,13 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
                 children: [
                   Icon(Icons.security_rounded, color: cs.primary),
                   const SizedBox(width: 8),
-                  Text('Security PIN Settings', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 16)),
+                  Text(
+                    'Security PIN Settings',
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
                 ],
               ),
               content: Column(
@@ -821,33 +1037,46 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
                 children: [
                   Text(
                     'Secure your staff portal access with a 4-digit PIN lock on app launch and login.',
-                    style: GoogleFonts.poppins(fontSize: 12, color: cs.onSurface.withValues(alpha: 0.7)),
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      color: cs.onSurface.withValues(alpha: 0.7),
+                    ),
                   ),
                   const SizedBox(height: 16),
                   SwitchListTile(
                     title: Text(
                       'Require PIN Code',
-                      style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w600),
+                      style: GoogleFonts.poppins(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                     value: isEnabled,
-                    activeColor: cs.primary,
+                    activeThumbColor: cs.primary,
                     contentPadding: EdgeInsets.zero,
                     onChanged: (val) async {
                       if (val) {
                         final newPin = await _promptNewPin();
                         if (newPin != null) {
                           await prefs.setBool('staff_pin_enabled_$email', true);
-                          await prefs.setString('staff_pin_code_$email', newPin);
+                          await prefs.setString(
+                            'staff_pin_code_$email',
+                            newPin,
+                          );
                           setStateDialog(() {
                             isEnabled = true;
                           });
                           _showSnackBar('PIN Code enabled successfully! 🎉');
                         }
                       } else {
-                        final currentPin = prefs.getString('staff_pin_code_$email') ?? '';
+                        final currentPin =
+                            prefs.getString('staff_pin_code_$email') ?? '';
                         final verified = await _promptVerifyPin(currentPin);
                         if (verified) {
-                          await prefs.setBool('staff_pin_enabled_$email', false);
+                          await prefs.setBool(
+                            'staff_pin_enabled_$email',
+                            false,
+                          );
                           await prefs.remove('staff_pin_code_$email');
                           setStateDialog(() {
                             isEnabled = false;
@@ -862,7 +1091,10 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: Text('Close', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+                  child: Text(
+                    'Close',
+                    style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+                  ),
                 ),
               ],
             );
@@ -875,20 +1107,29 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
   @override
   Widget build(BuildContext context) {
     if (_staffEmail.isEmpty) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     // 1. Listen to clinic staff view permissions & login validation in real-time
     return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance.collection('settings').doc('clinic_config').snapshots(),
+      stream: FirebaseFirestore.instance
+          .collection('settings')
+          .doc('clinic_config')
+          .snapshots(),
       builder: (context, configSnapshot) {
         if (configSnapshot.hasError) {
-          return Scaffold(body: Center(child: Text('Error loading configuration: ${configSnapshot.error}')));
+          return Scaffold(
+            body: Center(
+              child: Text(
+                'Error loading configuration: ${configSnapshot.error}',
+              ),
+            ),
+          );
         }
         if (configSnapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(body: Center(child: CircularProgressIndicator()));
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
         }
 
         final configData = configSnapshot.data?.data() as Map<String, dynamic>?;
@@ -903,16 +1144,26 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.gpp_maybe_rounded, size: 80, color: Colors.amber),
+                    const Icon(
+                      Icons.gpp_maybe_rounded,
+                      size: 80,
+                      color: Colors.amber,
+                    ),
                     const SizedBox(height: 24),
                     Text(
                       'Access Suspended',
-                      style: GoogleFonts.poppins(fontSize: 22, fontWeight: FontWeight.w800),
+                      style: GoogleFonts.poppins(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                     const SizedBox(height: 12),
                     Text(
                       'The Clinic Administrator has currently disabled staff-side appointment views. Please contact your administrator.',
-                      style: GoogleFonts.poppins(color: Colors.grey, fontSize: 13.5),
+                      style: GoogleFonts.poppins(
+                        color: Colors.grey,
+                        fontSize: 13.5,
+                      ),
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 32),
@@ -920,7 +1171,9 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
                       onPressed: _logout,
                       icon: const Icon(Icons.logout_rounded),
                       label: const Text('Exit Portal'),
-                      style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                      ),
                     ),
                   ],
                 ),
@@ -931,32 +1184,57 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
 
         // 2. Validate that staff email account still exists and password matches
         return StreamBuilder<DocumentSnapshot>(
-          stream: FirebaseFirestore.instance.collection('staff').doc(_staffEmail).snapshots(),
+          stream: FirebaseFirestore.instance
+              .collection('staff')
+              .doc(_staffEmail)
+              .snapshots(),
           builder: (context, staffSnapshot) {
             if (staffSnapshot.hasError) {
-              return Scaffold(body: Center(child: Text('Error verifying credentials: ${staffSnapshot.error}')));
+              return Scaffold(
+                body: Center(
+                  child: Text(
+                    'Error verifying credentials: ${staffSnapshot.error}',
+                  ),
+                ),
+              );
             }
             if (staffSnapshot.connectionState == ConnectionState.waiting) {
-              return const Scaffold(body: Center(child: CircularProgressIndicator()));
+              return const Scaffold(
+                body: Center(child: CircularProgressIndicator()),
+              );
             }
 
-            final staffData = staffSnapshot.data?.data() as Map<String, dynamic>?;
+            final staffData =
+                staffSnapshot.data?.data() as Map<String, dynamic>?;
 
             // If account is deleted or password changes, trigger automatic force logout
             if (staffData == null) {
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 _logout();
-                _showSnackBar('Your staff account has been deleted by the administrator.', isError: true);
+                _showSnackBar(
+                  'Your staff account has been deleted by the administrator.',
+                  isError: true,
+                );
               });
-              return const Scaffold(body: Center(child: CircularProgressIndicator()));
+              return const Scaffold(
+                body: Center(child: CircularProgressIndicator()),
+              );
             }
 
             // 3. Load all appointments in real-time
             return StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance.collection('appointments').snapshots(),
+              stream: FirebaseFirestore.instance
+                  .collection('appointments')
+                  .snapshots(),
               builder: (context, apptSnapshot) {
                 if (apptSnapshot.hasError) {
-                  return Scaffold(body: Center(child: Text('Error loading appointments: ${apptSnapshot.error}')));
+                  return Scaffold(
+                    body: Center(
+                      child: Text(
+                        'Error loading appointments: ${apptSnapshot.error}',
+                      ),
+                    ),
+                  );
                 }
                 if (apptSnapshot.connectionState == ConnectionState.waiting) {
                   return Scaffold(
@@ -968,7 +1246,10 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
                 // Map appointments to list
                 final rawDocs = apptSnapshot.data?.docs ?? [];
                 final appointments = rawDocs.map((doc) {
-                  return Appointment.fromJson({...doc.data() as Map<String, dynamic>, 'id': doc.id});
+                  return Appointment.fromJson({
+                    ...doc.data() as Map<String, dynamic>,
+                    'id': doc.id,
+                  });
                 }).toList();
 
                 // Sort descending scheduledAt
@@ -983,7 +1264,9 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
                 if (!_remindersSynced && appointments.isNotEmpty) {
                   _remindersSynced = true;
                   WidgetsBinding.instance.addPostFrameCallback((_) {
-                    NotificationService().syncScheduledNotifications(appointments);
+                    NotificationService().syncScheduledNotifications(
+                      appointments,
+                    );
                   });
                 }
 
@@ -992,17 +1275,41 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
                 final todayStr = DateFormat('yyyy-MM-dd').format(now);
                 final todayCount = appointments.where((a) {
                   if (a.scheduledAt == null) return false;
-                  return DateFormat('yyyy-MM-dd').format(a.scheduledAt!.toLocal()) == todayStr;
+                  return DateFormat(
+                        'yyyy-MM-dd',
+                      ).format(a.scheduledAt!.toLocal()) ==
+                      todayStr;
                 }).length;
 
-                final pendingCount = appointments.where((a) => a.status.toLowerCase() == 'pending').length;
-                final confirmedCount = appointments.where((a) => a.status.toLowerCase() == 'confirmed').length;
+                final pendingCount = appointments
+                    .where((a) => a.status.toLowerCase() == 'pending')
+                    .length;
+                final confirmedCount = appointments
+                    .where((a) => a.status.toLowerCase() == 'confirmed')
+                    .length;
+
+                // Compute revenue metrics
+                final totalRevenue = appointments.fold<double>(
+                  0,
+                  (sum, a) => sum + a.amount,
+                );
+                final collectedRevenue = appointments
+                    .where((a) => a.paymentStatus.toLowerCase() == 'paid')
+                    .fold<double>(0, (sum, a) => sum + a.amount);
+                final pendingRevenue = appointments
+                    .where((a) => a.paymentStatus.toLowerCase() == 'pending')
+                    .fold<double>(0, (sum, a) => sum + a.amount);
 
                 // Apply search & status filter
                 final filteredAppointments = appointments.where((apt) {
-                  final matchesSearch = apt.patientName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+                  final matchesSearch =
+                      apt.patientName.toLowerCase().contains(
+                        _searchQuery.toLowerCase(),
+                      ) ||
                       apt.phoneNumber.contains(_searchQuery);
-                  final matchesStatus = _selectedStatus == 'All' || apt.status.toLowerCase() == _selectedStatus.toLowerCase();
+                  final matchesStatus =
+                      _selectedStatus == 'All' ||
+                      apt.status.toLowerCase() == _selectedStatus.toLowerCase();
                   return matchesSearch && matchesStatus;
                 }).toList();
 
@@ -1017,7 +1324,10 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
                       children: [
                         Text(
                           'Staff Dashboard',
-                          style: GoogleFonts.poppins(fontWeight: FontWeight.w800, fontSize: 20),
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 20,
+                          ),
                         ),
                         Text(
                           'Signed in: $_staffEmail',
@@ -1038,12 +1348,17 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
                       ),
                       // Manual background speaking reminders sync button
                       IconButton(
-                        onPressed: _isSyncing ? null : () => _manualSync(appointments),
+                        onPressed: _isSyncing
+                            ? null
+                            : () => _manualSync(appointments),
                         icon: _isSyncing
                             ? SizedBox(
                                 width: 20,
                                 height: 20,
-                                child: CircularProgressIndicator(strokeWidth: 2, color: cs.primary),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: cs.primary,
+                                ),
                               )
                             : const Icon(Icons.sync_rounded),
                         tooltip: 'Synchronize Reminders',
@@ -1069,9 +1384,20 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
                               flex: 2,
                               child: Column(
                                 children: [
-                                  _buildMetricsRow(todayCount, pendingCount, confirmedCount),
+                                  _buildMetricsRow(
+                                    todayCount,
+                                    pendingCount,
+                                    confirmedCount,
+                                    totalRevenue,
+                                    collectedRevenue,
+                                    pendingRevenue,
+                                  ),
                                   _buildSearchAndFilters(),
-                                  Expanded(child: _buildAppointmentsList(filteredAppointments)),
+                                  Expanded(
+                                    child: _buildAppointmentsList(
+                                      filteredAppointments,
+                                    ),
+                                  ),
                                 ],
                               ),
                             ),
@@ -1107,16 +1433,32 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
                           children: [
                             // Greeting banner on mobile
                             Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 10,
+                              ),
                               child: _buildGreetingBanner(theme, cs),
                             ),
-                            _buildMetricsRow(todayCount, pendingCount, confirmedCount),
+                            _buildMetricsRow(
+                              todayCount,
+                              pendingCount,
+                              confirmedCount,
+                              totalRevenue,
+                              collectedRevenue,
+                              pendingRevenue,
+                            ),
                             Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 4,
+                              ),
                               child: _buildVisionAnalyzerCard(theme, cs),
                             ),
                             _buildSearchAndFilters(),
-                            _buildAppointmentsList(filteredAppointments, shrinkWrap: true),
+                            _buildAppointmentsList(
+                              filteredAppointments,
+                              shrinkWrap: true,
+                            ),
                           ],
                         ),
                 );
@@ -1128,43 +1470,117 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
     );
   }
 
-  Widget _buildMetricsRow(int todayCount, int pendingCount, int confirmedCount) {
+  Widget _buildMetricsRow(
+    int todayCount,
+    int pendingCount,
+    int confirmedCount,
+    double totalRevenue,
+    double collectedRevenue,
+    double pendingRevenue,
+  ) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: PremiumCard(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+      child: Column(
+        children: [
+          PremiumCard(
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.analytics_rounded, color: cs.primary, size: 20),
-                const SizedBox(width: 8),
-                Text(
-                  'Appointments Quick View',
-                  style: GoogleFonts.poppins(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: cs.onSurface,
-                  ),
+                Row(
+                  children: [
+                    Icon(Icons.analytics_rounded, color: cs.primary, size: 20),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Appointments Quick View',
+                      style: GoogleFonts.poppins(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: cs.onSurface,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    _buildStatItemVertical(
+                      'TODAY',
+                      todayCount.toString(),
+                      Icons.calendar_today_rounded,
+                      cs.primary,
+                    ),
+                    _buildDivider(),
+                    _buildStatItemVertical(
+                      'PENDING',
+                      pendingCount.toString(),
+                      Icons.hourglass_empty_rounded,
+                      AppColors.statusPending,
+                    ),
+                    _buildDivider(),
+                    _buildStatItemVertical(
+                      'CONFIRMED',
+                      confirmedCount.toString(),
+                      Icons.check_circle_outline_rounded,
+                      AppColors.statusConfirmed,
+                    ),
+                  ],
                 ),
               ],
             ),
-            const SizedBox(height: 16),
-            Row(
+          ),
+          const SizedBox(height: 12),
+          PremiumCard(
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildStatItemVertical('TODAY', todayCount.toString(), Icons.calendar_today_rounded, cs.primary),
-                _buildDivider(),
-                _buildStatItemVertical('PENDING', pendingCount.toString(), Icons.hourglass_empty_rounded, AppColors.statusPending),
-                _buildDivider(),
-                _buildStatItemVertical('CONFIRMED', confirmedCount.toString(), Icons.check_circle_outline_rounded, AppColors.statusConfirmed),
+                Row(
+                  children: [
+                    Icon(Icons.payments_rounded, color: Colors.green, size: 20),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Payments Quick View',
+                      style: GoogleFonts.poppins(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: cs.onSurface,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    _buildStatItemVertical(
+                      'TOTAL',
+                      'Rs. ${totalRevenue.toStringAsFixed(0)}',
+                      Icons.account_balance_wallet_rounded,
+                      cs.primary,
+                    ),
+                    _buildDivider(),
+                    _buildStatItemVertical(
+                      'COLLECTED',
+                      'Rs. ${collectedRevenue.toStringAsFixed(0)}',
+                      Icons.check_circle_rounded,
+                      Colors.green,
+                    ),
+                    _buildDivider(),
+                    _buildStatItemVertical(
+                      'PENDING',
+                      'Rs. ${pendingRevenue.toStringAsFixed(0)}',
+                      Icons.pending_actions_rounded,
+                      Colors.orange,
+                    ),
+                  ],
+                ),
               ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -1172,7 +1588,7 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
   Widget _buildSearchAndFilters() {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Column(
@@ -1200,28 +1616,36 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
-              children: ['All', 'Pending', 'Confirmed', 'Completed', 'Cancelled'].map((status) {
-                final isSelected = _selectedStatus.toLowerCase() == status.toLowerCase();
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8.0),
-                  child: FilterChip(
-                    label: Text(status),
-                    selected: isSelected,
-                    onSelected: (bool selected) {
-                      setState(() {
-                        _selectedStatus = selected ? status : 'All';
-                      });
+              children:
+                  ['All', 'Pending', 'Confirmed', 'Completed', 'Cancelled'].map(
+                    (status) {
+                      final isSelected =
+                          _selectedStatus.toLowerCase() == status.toLowerCase();
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 8.0),
+                        child: FilterChip(
+                          label: Text(status),
+                          selected: isSelected,
+                          onSelected: (bool selected) {
+                            setState(() {
+                              _selectedStatus = selected ? status : 'All';
+                            });
+                          },
+                          selectedColor: cs.primary.withValues(alpha: 0.15),
+                          checkmarkColor: cs.primary,
+                          labelStyle: GoogleFonts.poppins(
+                            fontSize: 12,
+                            fontWeight: isSelected
+                                ? FontWeight.bold
+                                : FontWeight.normal,
+                            color: isSelected
+                                ? cs.primary
+                                : cs.onSurface.withValues(alpha: 0.7),
+                          ),
+                        ),
+                      );
                     },
-                    selectedColor: cs.primary.withValues(alpha: 0.15),
-                    checkmarkColor: cs.primary,
-                    labelStyle: GoogleFonts.poppins(
-                      fontSize: 12,
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                      color: isSelected ? cs.primary : cs.onSurface.withValues(alpha: 0.7),
-                    ),
-                  ),
-                );
-              }).toList(),
+                  ).toList(),
             ),
           ),
         ],
@@ -1229,10 +1653,13 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
     );
   }
 
-  Widget _buildAppointmentsList(List<Appointment> appointments, {bool shrinkWrap = false}) {
+  Widget _buildAppointmentsList(
+    List<Appointment> appointments, {
+    bool shrinkWrap = false,
+  }) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    
+
     if (appointments.isEmpty) {
       final placeholder = Padding(
         padding: const EdgeInsets.all(24),
@@ -1255,9 +1682,9 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
             ),
             const SizedBox(height: 6),
             Text(
-              _searchQuery.isNotEmpty 
-                ? 'Try checking spelling or changing filters'
-                : 'Appointments will appear here once booked',
+              _searchQuery.isNotEmpty
+                  ? 'Try checking spelling or changing filters'
+                  : 'Appointments will appear here once booked',
               style: GoogleFonts.poppins(
                 fontSize: 13,
                 color: cs.onSurface.withValues(alpha: 0.5),
@@ -1267,12 +1694,16 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
           ],
         ),
       );
-      return shrinkWrap ? placeholder : Center(child: SingleChildScrollView(child: placeholder));
+      return shrinkWrap
+          ? placeholder
+          : Center(child: SingleChildScrollView(child: placeholder));
     }
 
     return ListView.builder(
       shrinkWrap: shrinkWrap,
-      physics: shrinkWrap ? const NeverScrollableScrollPhysics() : const BouncingScrollPhysics(),
+      physics: shrinkWrap
+          ? const NeverScrollableScrollPhysics()
+          : const BouncingScrollPhysics(),
       padding: EdgeInsets.fromLTRB(16, 4, 16, shrinkWrap ? 24 : 80),
       itemCount: appointments.length,
       itemBuilder: (context, index) {
@@ -1284,10 +1715,10 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
             ? DateFormat('EEE, MMM d').format(apt.scheduledAt!.toLocal())
             : 'Unscheduled';
         final isEmergency = apt.isEmergency;
-        
+
         final statusCol = statusColor(apt.status);
         final statusBg = statusBgColor(apt.status);
-        
+
         return Padding(
           padding: const EdgeInsets.only(bottom: 12.0),
           child: PremiumCard(
@@ -1301,7 +1732,10 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
                   children: [
                     // Time and Date column
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
                       decoration: BoxDecoration(
                         color: cs.primary.withValues(alpha: 0.08),
                         borderRadius: BorderRadius.circular(12),
@@ -1330,7 +1764,7 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
                       ),
                     ),
                     const SizedBox(width: 14),
-                    
+
                     // Patient name and Treatment type
                     Expanded(
                       child: Column(
@@ -1353,7 +1787,10 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
                               if (isEmergency) ...[
                                 const SizedBox(width: 6),
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: AppColors.statusCancelledBg,
                                     borderRadius: BorderRadius.circular(6),
@@ -1379,17 +1816,101 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
                               color: cs.primary,
                             ),
                           ),
+                          const SizedBox(height: 6),
+                          Row(
+                            children: [
+                              // Payment Status Badge
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: apt.paymentStatus == 'paid'
+                                      ? Colors.green.withValues(alpha: 0.12)
+                                      : Colors.orange.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: apt.paymentStatus == 'paid'
+                                        ? Colors.green.withValues(alpha: 0.2)
+                                        : Colors.orange.withValues(alpha: 0.2),
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      apt.paymentStatus == 'paid'
+                                          ? Icons.check_circle_rounded
+                                          : Icons.info_rounded,
+                                      size: 10,
+                                      color: apt.paymentStatus == 'paid'
+                                          ? Colors.green
+                                          : Colors.orange,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      apt.paymentStatus == 'paid'
+                                          ? 'PAID (Online)'
+                                          : 'UNPAID (Pay at Clinic)',
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.bold,
+                                        color: apt.paymentStatus == 'paid'
+                                            ? Colors.green
+                                            : Colors.orange,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              if (apt.paymentMethod == 'online' &&
+                                  apt.paymentStatus == 'pending') ...[
+                                const SizedBox(width: 8),
+                                TextButton.icon(
+                                  onPressed: () => _retryPayment(apt),
+                                  icon: const Icon(
+                                    Icons.payment_rounded,
+                                    size: 12,
+                                  ),
+                                  label: const Text('Pay Now'),
+                                  style: TextButton.styleFrom(
+                                    backgroundColor: Colors.blueAccent
+                                        .withValues(alpha: 0.1),
+                                    foregroundColor: Colors.blueAccent,
+                                    textStyle: GoogleFonts.poppins(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 0,
+                                    ),
+                                    minimumSize: Size.zero,
+                                    tapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
                         ],
                       ),
                     ),
                     const SizedBox(width: 8),
-                    
+
                     // Status Badge & Action button
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
                             color: statusBg,
                             borderRadius: BorderRadius.circular(12),
@@ -1407,14 +1928,21 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
                         Row(
                           children: [
                             IconButton(
-                              icon: Icon(Icons.phone_rounded, color: cs.primary, size: 18),
+                              icon: Icon(
+                                Icons.phone_rounded,
+                                color: cs.primary,
+                                size: 18,
+                              ),
                               onPressed: () => _makeCall(apt.phoneNumber),
                               style: IconButton.styleFrom(
                                 padding: EdgeInsets.zero,
                                 visualDensity: VisualDensity.compact,
                               ),
                             ),
-                            Icon(Icons.chevron_right_rounded, color: cs.onSurface.withValues(alpha: 0.3)),
+                            Icon(
+                              Icons.chevron_right_rounded,
+                              color: cs.onSurface.withValues(alpha: 0.3),
+                            ),
                           ],
                         ),
                       ],

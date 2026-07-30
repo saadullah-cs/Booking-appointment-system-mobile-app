@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -11,7 +10,6 @@ import 'dart:io';
 import '../auth_providers.dart';
 import '../../../models/app_user.dart';
 import '../../../theme/app_theme.dart';
-import '../../shared/widgets/premium_card.dart';
 
 class SecurityLockScreen extends ConsumerStatefulWidget {
   const SecurityLockScreen({super.key});
@@ -20,7 +18,8 @@ class SecurityLockScreen extends ConsumerStatefulWidget {
   ConsumerState<SecurityLockScreen> createState() => _SecurityLockScreenState();
 }
 
-class _SecurityLockScreenState extends ConsumerState<SecurityLockScreen> with TickerProviderStateMixin {
+class _SecurityLockScreenState extends ConsumerState<SecurityLockScreen>
+    with TickerProviderStateMixin {
   String _enteredPin = '';
   String _storedPin = '';
   bool _biometricEnabled = false;
@@ -37,7 +36,10 @@ class _SecurityLockScreenState extends ConsumerState<SecurityLockScreen> with Ti
     super.initState();
     _loadData();
 
-    _shakeController = AnimationController(vsync: this, duration: const Duration(milliseconds: 500));
+    _shakeController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    );
     _shakeAnim = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _shakeController, curve: Curves.elasticIn),
     );
@@ -115,15 +117,23 @@ class _SecurityLockScreenState extends ConsumerState<SecurityLockScreen> with Ti
 
   Future<void> _triggerBiometricScan() async {
     try {
-      final bool canAuthenticate = await _localAuth.canCheckBiometrics || await _localAuth.isDeviceSupported();
+      final bool canAuthenticate =
+          await _localAuth.canCheckBiometrics ||
+          await _localAuth.isDeviceSupported();
       if (!canAuthenticate) {
-        _showSnackBar('Biometric authentication is not available on this device.', isError: true);
+        _showSnackBar(
+          'Biometric authentication is not available on this device.',
+          isError: true,
+        );
         return;
       }
 
       final available = await _localAuth.getAvailableBiometrics();
       if (available.isEmpty) {
-        _showSnackBar('No biometrics enrolled. Please enroll a fingerprint on your device.', isError: true);
+        _showSnackBar(
+          'No biometrics enrolled. Please enroll a fingerprint on your device.',
+          isError: true,
+        );
         return;
       }
 
@@ -151,12 +161,18 @@ class _SecurityLockScreenState extends ConsumerState<SecurityLockScreen> with Ti
       }
 
       if (!authenticated && mounted) {
-        _showSnackBar('Authentication did not succeed. Please try again or use PIN.', isError: true);
+        _showSnackBar(
+          'Authentication did not succeed. Please try again or use PIN.',
+          isError: true,
+        );
       }
-    } on Exception catch (error, st) {
+    } on Exception catch (error) {
       debugPrint('Biometric auth error: $error');
       if (mounted) {
-        _showSnackBar('Biometric authentication failed. Please use your PIN.', isError: true);
+        _showSnackBar(
+          'Biometric authentication failed. Please use your PIN.',
+          isError: true,
+        );
       }
     }
   }
@@ -165,7 +181,10 @@ class _SecurityLockScreenState extends ConsumerState<SecurityLockScreen> with Ti
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(message, style: GoogleFonts.poppins(fontWeight: FontWeight.w500)),
+        content: Text(
+          message,
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w500),
+        ),
         backgroundColor: isError ? Colors.redAccent : AppColors.primary,
         behavior: SnackBarBehavior.floating,
       ),
@@ -180,7 +199,14 @@ class _SecurityLockScreenState extends ConsumerState<SecurityLockScreen> with Ti
 
     final cs = Theme.of(context).colorScheme;
     final authState = ref.watch(authStateProvider);
-    final user = authState.asData?.value ?? AppUser(uid: 'doctor-bashir', email: 'drbashir@gct.com', displayName: 'Dr. Bashir Ahmad', phoneNumber: '');
+    final user =
+        authState.asData?.value ??
+        AppUser(
+          uid: 'doctor-bashir',
+          email: 'drbashir@gct.com',
+          displayName: 'Dr. Bashir Ahmad',
+          phoneNumber: '',
+        );
 
     Widget avatar;
     if (_imagePath != null && _imagePath!.isNotEmpty) {
@@ -198,7 +224,8 @@ class _SecurityLockScreenState extends ConsumerState<SecurityLockScreen> with Ti
           fit: BoxFit.contain,
           cacheWidth: 160,
           cacheHeight: 160,
-          errorBuilder: (context, error, stackTrace) => const Icon(Icons.person_rounded, size: 40, color: Colors.white),
+          errorBuilder: (context, error, stackTrace) =>
+              const Icon(Icons.person_rounded, size: 40, color: Colors.white),
         ),
       );
     } else {
@@ -209,7 +236,8 @@ class _SecurityLockScreenState extends ConsumerState<SecurityLockScreen> with Ti
         fit: BoxFit.contain,
         cacheWidth: 160,
         cacheHeight: 160,
-        errorBuilder: (context, error, stackTrace) => const Icon(Icons.person_rounded, size: 40, color: Colors.white),
+        errorBuilder: (context, error, stackTrace) =>
+            const Icon(Icons.person_rounded, size: 40, color: Colors.white),
       );
     }
 
@@ -235,7 +263,7 @@ class _SecurityLockScreenState extends ConsumerState<SecurityLockScreen> with Ti
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 const SizedBox(height: 10),
-  
+
                 // Doctor photo avatar
                 Container(
                   width: 86,
@@ -245,7 +273,11 @@ class _SecurityLockScreenState extends ConsumerState<SecurityLockScreen> with Ti
                     shape: BoxShape.circle,
                     border: Border.all(color: AppColors.primary, width: 3),
                     boxShadow: [
-                      BoxShadow(color: AppColors.primary.withOpacity(0.3), blurRadius: 15, spreadRadius: 2),
+                      BoxShadow(
+                        color: AppColors.primary.withValues(alpha: 0.3),
+                        blurRadius: 15,
+                        spreadRadius: 2,
+                      ),
                     ],
                   ),
                   clipBehavior: Clip.hardEdge,
@@ -253,24 +285,38 @@ class _SecurityLockScreenState extends ConsumerState<SecurityLockScreen> with Ti
                   child: avatar,
                 ),
                 const SizedBox(height: 14),
-  
+
                 // Title Display
                 Text(
                   user.displayName.toUpperCase(),
-                  style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.white, letterSpacing: 0.5),
+                  style: GoogleFonts.poppins(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                    letterSpacing: 0.5,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   'Enter PIN to unlock app',
-                  style: GoogleFonts.poppins(fontSize: 12, color: Colors.white70),
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    color: Colors.white70,
+                  ),
                 ),
                 const SizedBox(height: 28),
-  
+
                 // PIN Indicators
                 AnimatedBuilder(
                   animation: _shakeController,
                   builder: (context, child) {
-                    final double offset = _isShaking ? (12 * (1.0 - _shakeAnim.value) * (ref.read(authStateProvider).hashCode % 2 == 0 ? 1 : -1)) : 0.0;
+                    final double offset = _isShaking
+                        ? (12 *
+                              (1.0 - _shakeAnim.value) *
+                              (ref.read(authStateProvider).hashCode % 2 == 0
+                                  ? 1
+                                  : -1))
+                        : 0.0;
                     return Transform.translate(
                       offset: Offset(offset, 0),
                       child: Row(
@@ -284,9 +330,15 @@ class _SecurityLockScreenState extends ConsumerState<SecurityLockScreen> with Ti
                             margin: const EdgeInsets.symmetric(horizontal: 12),
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
-                              color: filled ? (_isShaking ? Colors.redAccent : AppColors.primary) : Colors.transparent,
+                              color: filled
+                                  ? (_isShaking
+                                        ? Colors.redAccent
+                                        : AppColors.primary)
+                                  : Colors.transparent,
                               border: Border.all(
-                                color: _isShaking ? Colors.redAccent : AppColors.primary,
+                                color: _isShaking
+                                    ? Colors.redAccent
+                                    : AppColors.primary,
                                 width: 2.5,
                               ),
                             ),
@@ -296,9 +348,9 @@ class _SecurityLockScreenState extends ConsumerState<SecurityLockScreen> with Ti
                     );
                   },
                 ),
-  
+
                 const SizedBox(height: 36),
-  
+
                 // Custom Keypad Grid
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 40),
@@ -306,17 +358,29 @@ class _SecurityLockScreenState extends ConsumerState<SecurityLockScreen> with Ti
                     children: [
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [_buildKey('1'), _buildKey('2'), _buildKey('3')],
+                        children: [
+                          _buildKey('1'),
+                          _buildKey('2'),
+                          _buildKey('3'),
+                        ],
                       ),
                       const SizedBox(height: 16),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [_buildKey('4'), _buildKey('5'), _buildKey('6')],
+                        children: [
+                          _buildKey('4'),
+                          _buildKey('5'),
+                          _buildKey('6'),
+                        ],
                       ),
                       const SizedBox(height: 16),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [_buildKey('7'), _buildKey('8'), _buildKey('9')],
+                        children: [
+                          _buildKey('7'),
+                          _buildKey('8'),
+                          _buildKey('9'),
+                        ],
                       ),
                       const SizedBox(height: 16),
                       Row(
@@ -330,9 +394,8 @@ class _SecurityLockScreenState extends ConsumerState<SecurityLockScreen> with Ti
                     ],
                   ),
                 ),
-  
+
                 const SizedBox(height: 36),
-  
               ],
             ),
           ),
@@ -348,14 +411,18 @@ class _SecurityLockScreenState extends ConsumerState<SecurityLockScreen> with Ti
         width: 68,
         height: 68,
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.04),
+          color: Colors.white.withValues(alpha: 0.04),
           shape: BoxShape.circle,
           border: Border.all(color: Colors.white12, width: 1.5),
         ),
         alignment: Alignment.center,
         child: Text(
           label,
-          style: GoogleFonts.poppins(fontSize: 24, fontWeight: FontWeight.w700, color: Colors.white),
+          style: GoogleFonts.poppins(
+            fontSize: 24,
+            fontWeight: FontWeight.w700,
+            color: Colors.white,
+          ),
         ),
       ),
     );
@@ -369,12 +436,19 @@ class _SecurityLockScreenState extends ConsumerState<SecurityLockScreen> with Ti
         width: 68,
         height: 68,
         decoration: BoxDecoration(
-          color: AppColors.primary.withOpacity(0.12),
+          color: AppColors.primary.withValues(alpha: 0.12),
           shape: BoxShape.circle,
-          border: Border.all(color: AppColors.primary.withOpacity(0.4), width: 1.5),
+          border: Border.all(
+            color: AppColors.primary.withValues(alpha: 0.4),
+            width: 1.5,
+          ),
         ),
         alignment: Alignment.center,
-        child: const Icon(Icons.fingerprint_rounded, color: AppColors.primary, size: 30),
+        child: const Icon(
+          Icons.fingerprint_rounded,
+          color: AppColors.primary,
+          size: 30,
+        ),
       ),
     );
   }
@@ -385,13 +459,14 @@ class _SecurityLockScreenState extends ConsumerState<SecurityLockScreen> with Ti
       child: Container(
         width: 68,
         height: 68,
-        decoration: const BoxDecoration(
-          shape: BoxShape.circle,
-        ),
+        decoration: const BoxDecoration(shape: BoxShape.circle),
         alignment: Alignment.center,
-        child: const Icon(Icons.backspace_outlined, color: Colors.white70, size: 24),
+        child: const Icon(
+          Icons.backspace_outlined,
+          color: Colors.white70,
+          size: 24,
+        ),
       ),
     );
   }
 }
-

@@ -25,7 +25,8 @@ class PaymentScreen extends ConsumerStatefulWidget {
   ConsumerState<PaymentScreen> createState() => _PaymentScreenState();
 }
 
-class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTickerProviderStateMixin {
+class _PaymentScreenState extends ConsumerState<PaymentScreen>
+    with SingleTickerProviderStateMixin {
   PaymentRepository get _repository => ref.read(paymentRepositoryProvider);
   final _patientController = TextEditingController();
   final _amountController = TextEditingController();
@@ -38,7 +39,15 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
 
   Future<void> _exportPayments() async {
     try {
-      final header = ['Payment ID', 'Patient Name', 'Amount (PKR)', 'Payment Method', 'Status', 'Note/Details', 'Payment Date'];
+      final header = [
+        'Payment ID',
+        'Patient Name',
+        'Amount (PKR)',
+        'Payment Method',
+        'Status',
+        'Note/Details',
+        'Payment Date',
+      ];
       final rows = <List<dynamic>>[header];
       for (final payment in _payments) {
         rows.add([
@@ -60,7 +69,9 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
 
       if (success && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Payments exported to Excel successfully! 💾')),
+          const SnackBar(
+            content: Text('Payments exported to Excel successfully! 💾'),
+          ),
         );
       }
     } catch (e) {
@@ -77,11 +88,16 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
       final excel = await ImportExportService.importExcel(context: context);
       if (excel == null) return;
 
-      final rows = ImportExportService.parseSheet(excel: excel, sheetName: 'Payments');
+      final rows = ImportExportService.parseSheet(
+        excel: excel,
+        sheetName: 'Payments',
+      );
       if (rows.isEmpty) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('No payments sheet found or sheet is empty.')),
+            const SnackBar(
+              content: Text('No payments sheet found or sheet is empty.'),
+            ),
           );
         }
         return;
@@ -91,11 +107,12 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
       for (final row in rows) {
         final id = row['Payment ID']?.toString() ?? _uuid.v4();
         final patientName = row['Patient Name']?.toString() ?? '';
-        final amount = double.tryParse(row['Amount (PKR)']?.toString() ?? '0') ?? 0.0;
+        final amount =
+            double.tryParse(row['Amount (PKR)']?.toString() ?? '0') ?? 0.0;
         final method = row['Payment Method']?.toString() ?? 'Cash';
         final status = row['Status']?.toString() ?? 'Paid';
         final note = row['Note/Details']?.toString() ?? '';
-        
+
         DateTime paidAt;
         final rawDate = row['Payment Date'];
         if (rawDate != null) {
@@ -106,16 +123,18 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
 
         if (patientName.isNotEmpty) {
           final double pAmt = status.toLowerCase() == 'paid' ? amount : 0.0;
-          imported.add(Payment(
-            id: id,
-            patientName: patientName,
-            amount: amount,
-            paidAmount: pAmt,
-            paidAt: paidAt,
-            method: method,
-            status: status,
-            note: note,
-          ));
+          imported.add(
+            Payment(
+              id: id,
+              patientName: patientName,
+              amount: amount,
+              paidAmount: pAmt,
+              paidAt: paidAt,
+              method: method,
+              status: status,
+              note: note,
+            ),
+          );
         }
       }
 
@@ -139,6 +158,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
       }
     }
   }
+
   final Uuid _uuid = const Uuid();
   late TabController _tabController;
 
@@ -154,7 +174,13 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
   List<String> _patientSuggestions = [];
   bool _showFilters = false;
 
-  static const _methods = ['Cash', 'Card', 'Bank Transfer', 'JazzCash', 'EasyPaisa'];
+  static const _methods = [
+    'Cash',
+    'Card',
+    'Bank Transfer',
+    'JazzCash',
+    'EasyPaisa',
+  ];
   static const _statuses = ['Paid', 'Partial', 'Pending'];
   static const _filterOptions = ['All', 'Paid', 'Partial', 'Pending'];
 
@@ -181,17 +207,19 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
     final data = await _repository.loadPayments();
     List<String> suggestions = [];
     try {
-      final appointments = await ref.read(appointmentRepositoryProvider).loadAppointments();
+      final appointments = await ref
+          .read(appointmentRepositoryProvider)
+          .loadAppointments();
       suggestions = appointments.map((a) => a.patientName).toSet().toList();
       suggestions.sort();
     } catch (e) {
       debugPrint('Error loading suggestions: $e');
     }
     if (!mounted) return;
-    setState(() { 
-      _payments = data; 
+    setState(() {
+      _payments = data;
       _patientSuggestions = suggestions;
-      _isLoading = false; 
+      _isLoading = false;
     });
   }
 
@@ -200,10 +228,12 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
       context: context,
       firstDate: DateTime(2020),
       lastDate: DateTime.now().add(const Duration(days: 365)),
-      initialDateRange: _customDateRange ?? DateTimeRange(
-        start: DateTime.now().subtract(const Duration(days: 7)),
-        end: DateTime.now(),
-      ),
+      initialDateRange:
+          _customDateRange ??
+          DateTimeRange(
+            start: DateTime.now().subtract(const Duration(days: 7)),
+            end: DateTime.now(),
+          ),
     );
     if (picked != null) {
       setState(() {
@@ -213,7 +243,10 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
     }
   }
 
-  Future<void> _selectReminderDate(BuildContext context, {void Function(DateTime)? onSelected}) async {
+  Future<void> _selectReminderDate(
+    BuildContext context, {
+    void Function(DateTime)? onSelected,
+  }) async {
     final DateTime? pickedDate = await showDatePicker(
       context: context,
       initialDate: DateTime.now().add(const Duration(days: 1)),
@@ -261,17 +294,19 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
     final pId = _uuid.v4();
     final patientName = _patientController.text.trim();
 
-    await _repository.savePayment(Payment(
-      id: pId,
-      patientName: patientName,
-      amount: amount,
-      paidAmount: paidAmount,
-      paidAt: DateTime.now(),
-      method: _method,
-      status: finalStatus,
-      note: _noteController.text.trim(),
-      reminderDate: _reminderDate,
-    ));
+    await _repository.savePayment(
+      Payment(
+        id: pId,
+        patientName: patientName,
+        amount: amount,
+        paidAmount: paidAmount,
+        paidAt: DateTime.now(),
+        method: _method,
+        status: finalStatus,
+        note: _noteController.text.trim(),
+        reminderDate: _reminderDate,
+      ),
+    );
 
     // Handle payment notifications
     try {
@@ -288,7 +323,8 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
         await NotificationService().scheduleLocalNotification(
           id: NotificationService.getPaymentReminderId(pId),
           title: 'Collect Outstanding Balance 💰',
-          body: 'Collect outstanding balance of PKR ${remaining.toStringAsFixed(0)} from $patientName.',
+          body:
+              'Collect outstanding balance of PKR ${remaining.toStringAsFixed(0)} from $patientName.',
           scheduledDate: _reminderDate!,
           payload: '/payments',
         );
@@ -308,7 +344,9 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
     });
     if (!mounted) return;
     FocusScope.of(context).unfocus();
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Payment saved ✅')));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Payment saved ✅')));
     final width = MediaQuery.of(context).size.width;
     if (width <= 750) {
       _tabController.animateTo(1);
@@ -326,9 +364,9 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
     } catch (e) {
       debugPrint('Error printing receipt: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to print receipt: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to print receipt: $e')));
       }
     }
   }
@@ -362,9 +400,17 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
             _detailRow(cs, 'Remaining', fmt.format(p.amount - p.paidAmount)),
             _detailRow(cs, 'Method', p.method),
             _detailRow(cs, 'Status', p.status),
-            _detailRow(cs, 'Date Recorded', DateFormat('d MMM y, hh:mm a').format(p.paidAt)),
+            _detailRow(
+              cs,
+              'Date Recorded',
+              DateFormat('d MMM y, hh:mm a').format(p.paidAt),
+            ),
             if (p.reminderDate != null)
-              _detailRow(cs, 'Reminder Date', DateFormat('d MMM y, hh:mm a').format(p.reminderDate!)),
+              _detailRow(
+                cs,
+                'Reminder Date',
+                DateFormat('d MMM y, hh:mm a').format(p.reminderDate!),
+              ),
             if (p.note.isNotEmpty) _detailRow(cs, 'Notes', p.note),
           ],
         ),
@@ -374,7 +420,10 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
               Navigator.pop(ctx);
               _printReceipt(p);
             },
-            child: const Text('Print Receipt', style: TextStyle(color: Colors.teal)),
+            child: const Text(
+              'Print Receipt',
+              style: TextStyle(color: Colors.teal),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx),
@@ -392,7 +441,10 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
         text: TextSpan(
           style: GoogleFonts.poppins(color: cs.onSurface, fontSize: 13),
           children: [
-            TextSpan(text: '$label: ', style: const TextStyle(fontWeight: FontWeight.w700)),
+            TextSpan(
+              text: '$label: ',
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
             TextSpan(text: value),
           ],
         ),
@@ -404,7 +456,9 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
     final cs = Theme.of(context).colorScheme;
     final nameCtrl = TextEditingController(text: p.patientName);
     final amtCtrl = TextEditingController(text: p.amount.toStringAsFixed(0));
-    final paidAmtCtrl = TextEditingController(text: p.paidAmount.toStringAsFixed(0));
+    final paidAmtCtrl = TextEditingController(
+      text: p.paidAmount.toStringAsFixed(0),
+    );
     final noteCtrl = TextEditingController(text: p.note);
     String method = p.method;
     String status = p.status;
@@ -415,7 +469,10 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setDlgState) => AlertDialog(
-          title: Text('Edit Payment', style: GoogleFonts.poppins(fontWeight: FontWeight.w700)),
+          title: Text(
+            'Edit Payment',
+            style: GoogleFonts.poppins(fontWeight: FontWeight.w700),
+          ),
           content: SingleChildScrollView(
             child: Form(
               key: formKey,
@@ -424,24 +481,33 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
                 children: [
                   TextFormField(
                     controller: nameCtrl,
-                    decoration: const InputDecoration(labelText: 'Patient Name'),
-                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                    decoration: const InputDecoration(
+                      labelText: 'Patient Name',
+                    ),
+                    validator: (v) =>
+                        (v == null || v.trim().isEmpty) ? 'Required' : null,
                   ),
                   const SizedBox(height: 10),
                   TextFormField(
                     controller: amtCtrl,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Total Bill (PKR)'),
+                    decoration: const InputDecoration(
+                      labelText: 'Total Bill (PKR)',
+                    ),
                     validator: (v) {
                       final a = double.tryParse((v ?? '').trim());
-                      return (a == null || a <= 0) ? 'Enter valid amount' : null;
+                      return (a == null || a <= 0)
+                          ? 'Enter valid amount'
+                          : null;
                     },
                   ),
                   const SizedBox(height: 10),
                   TextFormField(
                     controller: paidAmtCtrl,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Amount Paid (PKR)'),
+                    decoration: const InputDecoration(
+                      labelText: 'Amount Paid (PKR)',
+                    ),
                     validator: (v) {
                       final pa = double.tryParse((v ?? '').trim());
                       final ta = double.tryParse(amtCtrl.text.trim()) ?? 0;
@@ -453,17 +519,21 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
                     isExpanded: true,
-                    value: method,
+                    initialValue: method,
                     decoration: const InputDecoration(labelText: 'Method'),
-                    items: _methods.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
+                    items: _methods
+                        .map((m) => DropdownMenuItem(value: m, child: Text(m)))
+                        .toList(),
                     onChanged: (v) => setDlgState(() => method = v ?? method),
                   ),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
                     isExpanded: true,
-                    value: status,
+                    initialValue: status,
                     decoration: const InputDecoration(labelText: 'Status'),
-                    items: _statuses.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
+                    items: _statuses
+                        .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                        .toList(),
                     onChanged: (v) => setDlgState(() => status = v ?? status),
                   ),
                   const SizedBox(height: 10),
@@ -471,11 +541,14 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
                     children: [
                       Expanded(
                         child: OutlinedButton.icon(
-                          onPressed: () => _selectReminderDate(context, onSelected: (dt) {
-                            setDlgState(() {
-                              reminderDate = dt;
-                            });
-                          }),
+                          onPressed: () => _selectReminderDate(
+                            context,
+                            onSelected: (dt) {
+                              setDlgState(() {
+                                reminderDate = dt;
+                              });
+                            },
+                          ),
                           icon: const Icon(Icons.alarm_add_rounded, size: 16),
                           label: Text(
                             reminderDate == null
@@ -487,7 +560,10 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
                       ),
                       if (reminderDate != null)
                         IconButton(
-                          icon: const Icon(Icons.clear_rounded, color: Colors.red),
+                          icon: const Icon(
+                            Icons.clear_rounded,
+                            color: Colors.red,
+                          ),
                           onPressed: () {
                             setDlgState(() {
                               reminderDate = null;
@@ -514,7 +590,8 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
               onPressed: () async {
                 if (!formKey.currentState!.validate()) return;
                 final amount = double.tryParse(amtCtrl.text.trim()) ?? p.amount;
-                final paidAmount = double.tryParse(paidAmtCtrl.text.trim()) ?? 0;
+                final paidAmount =
+                    double.tryParse(paidAmtCtrl.text.trim()) ?? 0;
 
                 String finalStatus = status;
                 if (paidAmount >= amount) {
@@ -540,9 +617,13 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
 
                 // Cancel old payment reminder notification
                 try {
-                  await NotificationService().cancelNotification(NotificationService.getPaymentReminderId(p.id));
+                  await NotificationService().cancelNotification(
+                    NotificationService.getPaymentReminderId(p.id),
+                  );
                 } catch (e) {
-                  debugPrint('Failed to cancel payment reminder notification: $e');
+                  debugPrint(
+                    'Failed to cancel payment reminder notification: $e',
+                  );
                 }
 
                 // Schedule new balance collection reminder if there is outstanding amount and a reminder date is set
@@ -552,7 +633,8 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
                     await NotificationService().scheduleLocalNotification(
                       id: NotificationService.getPaymentReminderId(p.id),
                       title: 'Collect Outstanding Balance 💰',
-                      body: 'Collect outstanding balance of PKR ${remaining.toStringAsFixed(0)} from ${nameCtrl.text.trim()}.',
+                      body:
+                          'Collect outstanding balance of PKR ${remaining.toStringAsFixed(0)} from ${nameCtrl.text.trim()}.',
                       scheduledDate: reminderDate!,
                       payload: '/payments',
                     );
@@ -564,7 +646,9 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
                 if (mounted) {
                   Navigator.pop(ctx);
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Payment updated successfully ✅')),
+                    const SnackBar(
+                      content: Text('Payment updated successfully ✅'),
+                    ),
                   );
                   _loadPayments();
                 }
@@ -583,7 +667,10 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Delete Payment', style: GoogleFonts.poppins(fontWeight: FontWeight.w700)),
+        title: Text(
+          'Delete Payment',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w700),
+        ),
         content: Text(
           'Are you sure you want to delete the payment of ${fmt.format(p.amount)} for ${p.patientName}?',
           style: GoogleFonts.poppins(color: cs.onSurface),
@@ -599,7 +686,9 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
               if (mounted) {
                 Navigator.pop(ctx);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Payment deleted successfully 🗑️')),
+                  const SnackBar(
+                    content: Text('Payment deleted successfully 🗑️'),
+                  ),
                 );
               }
             },
@@ -613,7 +702,9 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
   Future<void> _deletePayment(String id) async {
     await _repository.deletePayment(id);
     try {
-      await NotificationService().cancelNotification(NotificationService.getPaymentReminderId(id));
+      await NotificationService().cancelNotification(
+        NotificationService.getPaymentReminderId(id),
+      );
     } catch (e) {
       debugPrint('Failed to cancel payment reminder notification: $e');
     }
@@ -646,8 +737,16 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
       return today.difference(itemDate).inDays <= 365;
     }
     if (_selectedDuration == 'Custom' && _customDateRange != null) {
-      final start = DateTime(_customDateRange!.start.year, _customDateRange!.start.month, _customDateRange!.start.day);
-      final end = DateTime(_customDateRange!.end.year, _customDateRange!.end.month, _customDateRange!.end.day).add(const Duration(days: 1));
+      final start = DateTime(
+        _customDateRange!.start.year,
+        _customDateRange!.start.month,
+        _customDateRange!.start.day,
+      );
+      final end = DateTime(
+        _customDateRange!.end.year,
+        _customDateRange!.end.month,
+        _customDateRange!.end.day,
+      ).add(const Duration(days: 1));
       return date.isAfter(start) && date.isBefore(end);
     }
     return true;
@@ -655,31 +754,39 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
 
   List<Payment> get _filteredPayments {
     var result = _payments;
-    
+
     // Duration Filter
     result = result.where((p) => _matchesDuration(p.paidAt)).toList();
-    
+
     // Status Filter
     if (_filterStatus != 'All') {
       result = result.where((p) => p.status == _filterStatus).toList();
     }
-    
+
     // Method Filter
     if (_selectedMethodFilter != 'All') {
       result = result.where((p) => p.method == _selectedMethodFilter).toList();
     }
-    
+
     // Search Query Filter
     if (_searchQuery.isNotEmpty) {
       final query = _searchQuery.toLowerCase();
-      result = result.where((p) => p.patientName.toLowerCase().contains(query) || p.note.toLowerCase().contains(query)).toList();
+      result = result
+          .where(
+            (p) =>
+                p.patientName.toLowerCase().contains(query) ||
+                p.note.toLowerCase().contains(query),
+          )
+          .toList();
     }
-    
+
     return result;
   }
 
   List<Payment> get _dueReminders {
-    return _payments.where((p) => p.status != 'Paid' && p.reminderDate != null).toList()
+    return _payments
+        .where((p) => p.status != 'Paid' && p.reminderDate != null)
+        .toList()
       ..sort((a, b) => a.reminderDate!.compareTo(b.reminderDate!));
   }
 
@@ -688,7 +795,10 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
     final cs = Theme.of(context).colorScheme;
     final fmt = NumberFormat.currency(symbol: 'PKR ');
     final totalPaid = _payments.fold<double>(0, (s, p) => s + p.paidAmount);
-    final totalPending = _payments.fold<double>(0, (s, p) => s + (p.amount - p.paidAmount));
+    final totalPending = _payments.fold<double>(
+      0,
+      (s, p) => s + (p.amount - p.paidAmount),
+    );
     final totalAll = _payments.fold<double>(0, (s, p) => s + p.amount);
 
     final width = MediaQuery.of(context).size.width;
@@ -702,7 +812,13 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text('Record New Payment', style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 14)),
+              Text(
+                'Record New Payment',
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                ),
+              ),
               const SizedBox(height: 12),
               RawAutocomplete<String>(
                 textEditingController: _patientController,
@@ -712,69 +828,98 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
                     return const Iterable<String>.empty();
                   }
                   return _patientSuggestions.where((String option) {
-                    return option.toLowerCase().contains(textEditingValue.text.toLowerCase());
+                    return option.toLowerCase().contains(
+                      textEditingValue.text.toLowerCase(),
+                    );
                   });
                 },
-                optionsViewBuilder: (BuildContext context, AutocompleteOnSelected<String> onSelected, Iterable<String> options) {
-                  return Align(
-                    alignment: Alignment.topLeft,
-                    child: Material(
-                      elevation: 4.0,
-                      borderRadius: BorderRadius.circular(12),
-                      color: cs.surface,
-                      child: Container(
-                        width: 320,
-                        constraints: const BoxConstraints(maxHeight: 200),
-                        child: ListView.builder(
-                          padding: EdgeInsets.zero,
-                          shrinkWrap: true,
-                          itemCount: options.length,
-                          itemBuilder: (BuildContext context, int index) {
-                            final String option = options.elementAt(index);
-                            return InkWell(
-                              onTap: () => onSelected(option),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                child: Text(
-                                  option,
-                                  style: GoogleFonts.poppins(fontSize: 13, color: cs.onSurface),
-                                ),
-                              ),
-                            );
-                          },
+                optionsViewBuilder:
+                    (
+                      BuildContext context,
+                      AutocompleteOnSelected<String> onSelected,
+                      Iterable<String> options,
+                    ) {
+                      return Align(
+                        alignment: Alignment.topLeft,
+                        child: Material(
+                          elevation: 4.0,
+                          borderRadius: BorderRadius.circular(12),
+                          color: cs.surface,
+                          child: Container(
+                            width: 320,
+                            constraints: const BoxConstraints(maxHeight: 200),
+                            child: ListView.builder(
+                              padding: EdgeInsets.zero,
+                              shrinkWrap: true,
+                              itemCount: options.length,
+                              itemBuilder: (BuildContext context, int index) {
+                                final String option = options.elementAt(index);
+                                return InkWell(
+                                  onTap: () => onSelected(option),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 12,
+                                    ),
+                                    child: Text(
+                                      option,
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 13,
+                                        color: cs.onSurface,
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
-                  );
-                },
-                fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-                  return TextFormField(
-                    controller: controller,
-                    focusNode: focusNode,
-                    onFieldSubmitted: (v) => onFieldSubmitted(),
-                    decoration: const InputDecoration(
-                      labelText: 'Patient name',
-                      prefixIcon: Icon(Icons.person_outline_rounded),
-                    ),
-                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
-                  );
-                },
+                      );
+                    },
+                fieldViewBuilder:
+                    (context, controller, focusNode, onFieldSubmitted) {
+                      return TextFormField(
+                        controller: controller,
+                        focusNode: focusNode,
+                        onFieldSubmitted: (v) => onFieldSubmitted(),
+                        decoration: const InputDecoration(
+                          labelText: 'Patient name',
+                          prefixIcon: Icon(Icons.person_outline_rounded),
+                        ),
+                        validator: (v) =>
+                            (v == null || v.trim().isEmpty) ? 'Required' : null,
+                      );
+                    },
               ),
               const SizedBox(height: 12),
               TextFormField(
                 controller: _amountController,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(labelText: 'Total Bill (PKR)', prefixIcon: Icon(Icons.monetization_on_outlined)),
-                validator: (v) { final a = double.tryParse((v ?? '').trim()); return (a == null || a <= 0) ? 'Enter valid amount' : null; },
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: const InputDecoration(
+                  labelText: 'Total Bill (PKR)',
+                  prefixIcon: Icon(Icons.monetization_on_outlined),
+                ),
+                validator: (v) {
+                  final a = double.tryParse((v ?? '').trim());
+                  return (a == null || a <= 0) ? 'Enter valid amount' : null;
+                },
               ),
               const SizedBox(height: 12),
               TextFormField(
                 controller: _paidAmountController,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(labelText: 'Amount Paid so far (PKR)', prefixIcon: Icon(Icons.account_balance_wallet_outlined)),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: const InputDecoration(
+                  labelText: 'Amount Paid so far (PKR)',
+                  prefixIcon: Icon(Icons.account_balance_wallet_outlined),
+                ),
                 validator: (v) {
                   final pa = double.tryParse((v ?? '').trim());
-                  final ta = double.tryParse(_amountController.text.trim()) ?? 0;
+                  final ta =
+                      double.tryParse(_amountController.text.trim()) ?? 0;
                   if (pa == null || pa < 0) return 'Enter valid amount';
                   if (pa > ta) return 'Cannot exceed total amount';
                   return null;
@@ -782,39 +927,87 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
               ),
               const SizedBox(height: 12),
               isWide
-                  ? Row(children: [
-                      Expanded(
-                        child: DropdownButtonFormField<String>(
-                          value: _method,
-                          decoration: const InputDecoration(labelText: 'Method'),
-                          items: _methods.map((m) => DropdownMenuItem(value: m, child: Text(m, style: GoogleFonts.poppins()))).toList(),
-                          onChanged: (v) => setState(() => _method = v ?? _method),
+                  ? Row(
+                      children: [
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            initialValue: _method,
+                            decoration: const InputDecoration(
+                              labelText: 'Method',
+                            ),
+                            items: _methods
+                                .map(
+                                  (m) => DropdownMenuItem(
+                                    value: m,
+                                    child: Text(
+                                      m,
+                                      style: GoogleFonts.poppins(),
+                                    ),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (v) =>
+                                setState(() => _method = v ?? _method),
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: DropdownButtonFormField<String>(
-                          value: _status,
-                          decoration: const InputDecoration(labelText: 'Status (Auto-classified)'),
-                          items: _statuses.map((s) => DropdownMenuItem(value: s, child: Text(s, style: GoogleFonts.poppins()))).toList(),
-                          onChanged: (v) => setState(() => _status = v ?? _status),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            initialValue: _status,
+                            decoration: const InputDecoration(
+                              labelText: 'Status (Auto-classified)',
+                            ),
+                            items: _statuses
+                                .map(
+                                  (s) => DropdownMenuItem(
+                                    value: s,
+                                    child: Text(
+                                      s,
+                                      style: GoogleFonts.poppins(),
+                                    ),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (v) =>
+                                setState(() => _status = v ?? _status),
+                          ),
                         ),
-                      ),
-                    ])
+                      ],
+                    )
                   : Column(
                       children: [
                         DropdownButtonFormField<String>(
-                          value: _method,
-                          decoration: const InputDecoration(labelText: 'Method'),
-                          items: _methods.map((m) => DropdownMenuItem(value: m, child: Text(m, style: GoogleFonts.poppins()))).toList(),
-                          onChanged: (v) => setState(() => _method = v ?? _method),
+                          initialValue: _method,
+                          decoration: const InputDecoration(
+                            labelText: 'Method',
+                          ),
+                          items: _methods
+                              .map(
+                                (m) => DropdownMenuItem(
+                                  value: m,
+                                  child: Text(m, style: GoogleFonts.poppins()),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (v) =>
+                              setState(() => _method = v ?? _method),
                         ),
                         const SizedBox(height: 12),
                         DropdownButtonFormField<String>(
-                          value: _status,
-                          decoration: const InputDecoration(labelText: 'Status (Auto-classified)'),
-                          items: _statuses.map((s) => DropdownMenuItem(value: s, child: Text(s, style: GoogleFonts.poppins()))).toList(),
-                          onChanged: (v) => setState(() => _status = v ?? _status),
+                          initialValue: _status,
+                          decoration: const InputDecoration(
+                            labelText: 'Status (Auto-classified)',
+                          ),
+                          items: _statuses
+                              .map(
+                                (s) => DropdownMenuItem(
+                                  value: s,
+                                  child: Text(s, style: GoogleFonts.poppins()),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (v) =>
+                              setState(() => _status = v ?? _status),
                         ),
                       ],
                     ),
@@ -844,7 +1037,10 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
               TextFormField(
                 controller: _noteController,
                 maxLines: 2,
-                decoration: const InputDecoration(labelText: 'Note (optional)', prefixIcon: Icon(Icons.notes_rounded)),
+                decoration: const InputDecoration(
+                  labelText: 'Note (optional)',
+                  prefixIcon: Icon(Icons.notes_rounded),
+                ),
               ),
               const SizedBox(height: 18),
               SizedBox(
@@ -867,21 +1063,43 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
           ? Center(
               child: Padding(
                 padding: const EdgeInsets.only(top: 24.0),
-                child: Text('No ${_filterStatus == 'All' ? '' : _filterStatus} payments yet.', style: GoogleFonts.poppins(color: cs.onSurface.withValues(alpha: 0.5))),
+                child: Text(
+                  'No ${_filterStatus == 'All' ? '' : _filterStatus} payments yet.',
+                  style: GoogleFonts.poppins(
+                    color: cs.onSurface.withValues(alpha: 0.5),
+                  ),
+                ),
               ),
             )
           : ListView.builder(
               shrinkWrap: !useFullHeight,
-              physics: useFullHeight ? const AlwaysScrollableScrollPhysics() : const NeverScrollableScrollPhysics(),
+              physics: useFullHeight
+                  ? const AlwaysScrollableScrollPhysics()
+                  : const NeverScrollableScrollPhysics(),
               itemCount: _filteredPayments.length,
               itemBuilder: (_, i) {
                 final p = _filteredPayments[i];
-                final sc = statusColor(p.status == 'Paid' ? 'confirmed' : p.status == 'Pending' ? 'pending' : 'completed');
-                final sb = statusBgColor(p.status == 'Paid' ? 'confirmed' : p.status == 'Pending' ? 'pending' : 'completed');
+                final sc = statusColor(
+                  p.status == 'Paid'
+                      ? 'confirmed'
+                      : p.status == 'Pending'
+                      ? 'pending'
+                      : 'completed',
+                );
+                final sb = statusBgColor(
+                  p.status == 'Paid'
+                      ? 'confirmed'
+                      : p.status == 'Pending'
+                      ? 'pending'
+                      : 'completed',
+                );
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 10),
                   child: PremiumCard(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
                     child: LayoutBuilder(
                       builder: (context, constraints) {
                         final compact = constraints.maxWidth < 360;
@@ -890,7 +1108,10 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
                           children: [
                             Text(
                               p.patientName,
-                              style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14),
+                              style: GoogleFonts.poppins(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 14,
+                              ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -901,10 +1122,14 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
                                   : 'Paid: ${fmt.format(p.paidAmount)} / ${fmt.format(p.amount)} (Owed: ${fmt.format(p.amount - p.paidAmount)})',
                               style: GoogleFonts.poppins(
                                 fontSize: 11.5,
-                                fontWeight: p.status == 'Paid' ? FontWeight.normal : FontWeight.w600,
+                                fontWeight: p.status == 'Paid'
+                                    ? FontWeight.normal
+                                    : FontWeight.w600,
                                 color: p.status == 'Paid'
                                     ? cs.onSurface.withValues(alpha: 0.6)
-                                    : (p.status == 'Pending' ? Colors.red : Colors.orange),
+                                    : (p.status == 'Pending'
+                                          ? Colors.red
+                                          : Colors.orange),
                               ),
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
@@ -917,17 +1142,28 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
                               children: [
                                 Text(
                                   '${DateFormat('d MMM y').format(p.paidAt)} • ${p.method}',
-                                  style: GoogleFonts.poppins(fontSize: 10, color: cs.onSurface.withValues(alpha: 0.45)),
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 10,
+                                    color: cs.onSurface.withValues(alpha: 0.45),
+                                  ),
                                 ),
                                 if (p.reminderDate != null)
                                   Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      Icon(Icons.alarm_rounded, size: 10, color: cs.primary),
+                                      Icon(
+                                        Icons.alarm_rounded,
+                                        size: 10,
+                                        color: cs.primary,
+                                      ),
                                       const SizedBox(width: 4),
                                       Text(
                                         'Remind: ${DateFormat('d MMM, h:mm a').format(p.reminderDate!)}',
-                                        style: GoogleFonts.poppins(fontSize: 10, color: cs.primary, fontWeight: FontWeight.w600),
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 10,
+                                          color: cs.primary,
+                                          fontWeight: FontWeight.w600,
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -940,7 +1176,11 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             IconButton(
-                              icon: Icon(Icons.print_rounded, size: 16, color: Colors.teal.shade700),
+                              icon: Icon(
+                                Icons.print_rounded,
+                                size: 16,
+                                color: Colors.teal.shade700,
+                              ),
                               onPressed: () => _printReceipt(p),
                               padding: EdgeInsets.zero,
                               constraints: const BoxConstraints(),
@@ -948,9 +1188,15 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
                             ),
                             const SizedBox(width: 10),
                             IconButton(
-                              icon: Icon(Icons.history_rounded, size: 16, color: cs.primary.withValues(alpha: 0.85)),
+                              icon: Icon(
+                                Icons.history_rounded,
+                                size: 16,
+                                color: cs.primary.withValues(alpha: 0.85),
+                              ),
                               onPressed: () {
-                                context.push('/patient-history?name=${Uri.encodeComponent(p.patientName)}');
+                                context.push(
+                                  '/patient-history?name=${Uri.encodeComponent(p.patientName)}',
+                                );
                               },
                               padding: EdgeInsets.zero,
                               constraints: const BoxConstraints(),
@@ -958,7 +1204,11 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
                             ),
                             const SizedBox(width: 10),
                             IconButton(
-                              icon: Icon(Icons.visibility_outlined, size: 16, color: cs.primary.withValues(alpha: 0.8)),
+                              icon: Icon(
+                                Icons.visibility_outlined,
+                                size: 16,
+                                color: cs.primary.withValues(alpha: 0.8),
+                              ),
                               onPressed: () => _viewPaymentDetails(p),
                               padding: EdgeInsets.zero,
                               constraints: const BoxConstraints(),
@@ -966,7 +1216,11 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
                             ),
                             const SizedBox(width: 10),
                             IconButton(
-                              icon: Icon(Icons.edit_outlined, size: 16, color: const Color(0xFF0F766E)),
+                              icon: Icon(
+                                Icons.edit_outlined,
+                                size: 16,
+                                color: const Color(0xFF0F766E),
+                              ),
                               onPressed: () => _editPaymentDialog(p),
                               padding: EdgeInsets.zero,
                               constraints: const BoxConstraints(),
@@ -974,7 +1228,11 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
                             ),
                             const SizedBox(width: 10),
                             IconButton(
-                              icon: Icon(Icons.delete_outline_rounded, size: 16, color: cs.error),
+                              icon: Icon(
+                                Icons.delete_outline_rounded,
+                                size: 16,
+                                color: cs.error,
+                              ),
                               onPressed: () => _confirmDeletePayment(p),
                               padding: EdgeInsets.zero,
                               constraints: const BoxConstraints(),
@@ -991,10 +1249,18 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
                                     children: [
                                       CircleAvatar(
                                         radius: 20,
-                                        backgroundColor: cs.primary.withValues(alpha: 0.1),
+                                        backgroundColor: cs.primary.withValues(
+                                          alpha: 0.1,
+                                        ),
                                         child: Text(
-                                          p.patientName.isNotEmpty ? p.patientName[0].toUpperCase() : '?',
-                                          style: GoogleFonts.poppins(color: cs.primary, fontWeight: FontWeight.w700, fontSize: 15),
+                                          p.patientName.isNotEmpty
+                                              ? p.patientName[0].toUpperCase()
+                                              : '?',
+                                          style: GoogleFonts.poppins(
+                                            color: cs.primary,
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 15,
+                                          ),
                                         ),
                                       ),
                                       const SizedBox(width: 12),
@@ -1003,11 +1269,21 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
                                   ),
                                   const SizedBox(height: 12),
                                   Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                    decoration: BoxDecoration(color: sb, borderRadius: BorderRadius.circular(12)),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 6,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: sb,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
                                     child: Text(
                                       p.status,
-                                      style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.w600, color: sc),
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w600,
+                                        color: sc,
+                                      ),
                                     ),
                                   ),
                                   const SizedBox(height: 10),
@@ -1018,10 +1294,18 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
                                 children: [
                                   CircleAvatar(
                                     radius: 20,
-                                    backgroundColor: cs.primary.withValues(alpha: 0.1),
+                                    backgroundColor: cs.primary.withValues(
+                                      alpha: 0.1,
+                                    ),
                                     child: Text(
-                                      p.patientName.isNotEmpty ? p.patientName[0].toUpperCase() : '?',
-                                      style: GoogleFonts.poppins(color: cs.primary, fontWeight: FontWeight.w700, fontSize: 15),
+                                      p.patientName.isNotEmpty
+                                          ? p.patientName[0].toUpperCase()
+                                          : '?',
+                                      style: GoogleFonts.poppins(
+                                        color: cs.primary,
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 15,
+                                      ),
                                     ),
                                   ),
                                   const SizedBox(width: 12),
@@ -1031,11 +1315,23 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
                                     crossAxisAlignment: CrossAxisAlignment.end,
                                     children: [
                                       Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                        decoration: BoxDecoration(color: sb, borderRadius: BorderRadius.circular(12)),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: sb,
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                        ),
                                         child: Text(
                                           p.status,
-                                          style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.w600, color: sc),
+                                          style: GoogleFonts.poppins(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w600,
+                                            color: sc,
+                                          ),
                                         ),
                                       ),
                                       const SizedBox(height: 8),
@@ -1059,20 +1355,28 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
               margin: const EdgeInsets.only(bottom: 12),
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.08),
+                color: Colors.red.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.red.withOpacity(0.2)),
+                border: Border.all(color: Colors.red.withValues(alpha: 0.2)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      const Icon(Icons.notification_important_rounded, color: Colors.red, size: 20),
+                      const Icon(
+                        Icons.notification_important_rounded,
+                        color: Colors.red,
+                        size: 20,
+                      ),
                       const SizedBox(width: 8),
                       Text(
                         'Upcoming & Overdue Payments',
-                        style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 13, color: Colors.red),
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                          color: Colors.red,
+                        ),
                       ),
                     ],
                   ),
@@ -1086,7 +1390,9 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
                         style: GoogleFonts.poppins(
                           fontSize: 11.5,
                           color: Colors.red.shade900,
-                          fontWeight: isOverdue ? FontWeight.bold : FontWeight.normal,
+                          fontWeight: isOverdue
+                              ? FontWeight.bold
+                              : FontWeight.normal,
                         ),
                       ),
                     );
@@ -1116,7 +1422,10 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
                               },
                             )
                           : null,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
                     ),
                   ),
                 ),
@@ -1126,17 +1435,26 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
                   children: [
                     IconButton(
                       style: IconButton.styleFrom(
-                        backgroundColor: _showFilters ? cs.primary.withOpacity(0.12) : cs.surfaceVariant.withOpacity(0.3),
+                        backgroundColor: _showFilters
+                            ? cs.primary.withValues(alpha: 0.12)
+                            : cs.surfaceContainerHighest.withValues(alpha: 0.3),
                         padding: const EdgeInsets.all(12),
                       ),
                       icon: Icon(
-                        _showFilters ? Icons.filter_alt_rounded : Icons.filter_alt_outlined,
-                        color: _showFilters ? cs.primary : cs.onSurface.withOpacity(0.7),
+                        _showFilters
+                            ? Icons.filter_alt_rounded
+                            : Icons.filter_alt_outlined,
+                        color: _showFilters
+                            ? cs.primary
+                            : cs.onSurface.withValues(alpha: 0.7),
                       ),
-                      onPressed: () => setState(() => _showFilters = !_showFilters),
+                      onPressed: () =>
+                          setState(() => _showFilters = !_showFilters),
                       tooltip: 'Filter Options',
                     ),
-                    if (_selectedDuration != 'All' || _selectedMethodFilter != 'All' || _filterStatus != 'All')
+                    if (_selectedDuration != 'All' ||
+                        _selectedMethodFilter != 'All' ||
+                        _filterStatus != 'All')
                       Positioned(
                         right: -2,
                         top: -2,
@@ -1150,15 +1468,15 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
               ],
             ),
           ),
-          
+
           if (_showFilters) ...[
             Container(
               margin: const EdgeInsets.only(bottom: 12),
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: cs.surfaceVariant.withOpacity(0.12),
+                color: cs.surfaceContainerHighest.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: cs.outline.withOpacity(0.15)),
+                border: Border.all(color: cs.outline.withValues(alpha: 0.15)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1171,7 +1489,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
                         style: GoogleFonts.poppins(
                           fontSize: 10,
                           fontWeight: FontWeight.w800,
-                          color: cs.onSurface.withOpacity(0.55),
+                          color: cs.onSurface.withValues(alpha: 0.55),
                           letterSpacing: 1.0,
                         ),
                       ),
@@ -1191,17 +1509,25 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
                         ),
                         child: Text(
                           'Clear All',
-                          style: GoogleFonts.poppins(fontSize: 10.5, fontWeight: FontWeight.bold, color: cs.primary),
+                          style: GoogleFonts.poppins(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.bold,
+                            color: cs.primary,
+                          ),
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 8),
-                  
+
                   // Status Filters
                   Text(
                     'Status',
-                    style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.w700, color: cs.onSurface.withOpacity(0.4)),
+                    style: GoogleFonts.poppins(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: cs.onSurface.withValues(alpha: 0.4),
+                    ),
                   ),
                   const SizedBox(height: 4),
                   SingleChildScrollView(
@@ -1215,18 +1541,27 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
                           child: AnimatedContainer(
                             duration: const Duration(milliseconds: 150),
                             margin: const EdgeInsets.only(right: 6),
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 5,
+                            ),
                             decoration: BoxDecoration(
                               color: isSelected ? cs.primary : cs.surface,
                               borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: isSelected ? cs.primary : cs.outline.withOpacity(0.15)),
+                              border: Border.all(
+                                color: isSelected
+                                    ? cs.primary
+                                    : cs.outline.withValues(alpha: 0.15),
+                              ),
                             ),
                             child: Text(
                               f,
                               style: GoogleFonts.poppins(
                                 fontSize: 10.5,
                                 fontWeight: FontWeight.w600,
-                                color: isSelected ? Colors.white : cs.onSurface.withOpacity(0.7),
+                                color: isSelected
+                                    ? Colors.white
+                                    : cs.onSurface.withValues(alpha: 0.7),
                               ),
                             ),
                           ),
@@ -1239,58 +1574,86 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
                   // Duration Filters
                   Text(
                     'Time Duration',
-                    style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.w700, color: cs.onSurface.withOpacity(0.4)),
+                    style: GoogleFonts.poppins(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: cs.onSurface.withValues(alpha: 0.4),
+                    ),
                   ),
                   const SizedBox(height: 4),
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     physics: const BouncingScrollPhysics(),
                     child: Row(
-                      children: ['All', 'Today', 'Yesterday', '7 Days', '30 Days', '6 Months', '1 Year', 'Custom'].map((opt) {
-                        final isSelected = _selectedDuration == opt;
-                        String displayLabel = opt;
-                        if (opt == 'Custom' && _customDateRange != null) {
-                          displayLabel = '${DateFormat('d MMM').format(_customDateRange!.start)} - ${DateFormat('d MMM').format(_customDateRange!.end)}';
-                        }
-                        return GestureDetector(
-                          onTap: () {
-                            if (opt == 'Custom') {
-                              _selectCustomDateRange();
-                            } else {
-                              setState(() {
-                                _selectedDuration = opt;
-                                _customDateRange = null;
-                              });
+                      children:
+                          [
+                            'All',
+                            'Today',
+                            'Yesterday',
+                            '7 Days',
+                            '30 Days',
+                            '6 Months',
+                            '1 Year',
+                            'Custom',
+                          ].map((opt) {
+                            final isSelected = _selectedDuration == opt;
+                            String displayLabel = opt;
+                            if (opt == 'Custom' && _customDateRange != null) {
+                              displayLabel =
+                                  '${DateFormat('d MMM').format(_customDateRange!.start)} - ${DateFormat('d MMM').format(_customDateRange!.end)}';
                             }
-                          },
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 150),
-                            margin: const EdgeInsets.only(right: 6),
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                            decoration: BoxDecoration(
-                              color: isSelected ? cs.primary : cs.surface,
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: isSelected ? cs.primary : cs.outline.withOpacity(0.15)),
-                            ),
-                            child: Row(
-                              children: [
-                                Text(
-                                  displayLabel,
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 10.5,
-                                    fontWeight: FontWeight.w600,
-                                    color: isSelected ? Colors.white : cs.onSurface.withOpacity(0.7),
+                            return GestureDetector(
+                              onTap: () {
+                                if (opt == 'Custom') {
+                                  _selectCustomDateRange();
+                                } else {
+                                  setState(() {
+                                    _selectedDuration = opt;
+                                    _customDateRange = null;
+                                  });
+                                }
+                              },
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 150),
+                                margin: const EdgeInsets.only(right: 6),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 5,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isSelected ? cs.primary : cs.surface,
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: isSelected
+                                        ? cs.primary
+                                        : cs.outline.withValues(alpha: 0.15),
                                   ),
                                 ),
-                                if (opt == 'Custom' && isSelected) ...[
-                                  const SizedBox(width: 4),
-                                  const Icon(Icons.edit_calendar_rounded, size: 10, color: Colors.white),
-                                ],
-                              ],
-                            ),
-                          ),
-                        );
-                      }).toList(),
+                                child: Row(
+                                  children: [
+                                    Text(
+                                      displayLabel,
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.w600,
+                                        color: isSelected
+                                            ? Colors.white
+                                            : cs.onSurface.withValues(alpha: 0.7),
+                                      ),
+                                    ),
+                                    if (opt == 'Custom' && isSelected) ...[
+                                      const SizedBox(width: 4),
+                                      const Icon(
+                                        Icons.edit_calendar_rounded,
+                                        size: 10,
+                                        color: Colors.white,
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            );
+                          }).toList(),
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -1298,7 +1661,11 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
                   // Method Filters
                   Text(
                     'Payment Method',
-                    style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.w700, color: cs.onSurface.withOpacity(0.4)),
+                    style: GoogleFonts.poppins(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: cs.onSurface.withValues(alpha: 0.4),
+                    ),
                   ),
                   const SizedBox(height: 4),
                   SingleChildScrollView(
@@ -1308,22 +1675,32 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
                       children: ['All', ..._methods].map((m) {
                         final isSelected = _selectedMethodFilter == m;
                         return GestureDetector(
-                          onTap: () => setState(() => _selectedMethodFilter = m),
+                          onTap: () =>
+                              setState(() => _selectedMethodFilter = m),
                           child: AnimatedContainer(
                             duration: const Duration(milliseconds: 150),
                             margin: const EdgeInsets.only(right: 6),
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 5,
+                            ),
                             decoration: BoxDecoration(
                               color: isSelected ? cs.primary : cs.surface,
                               borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: isSelected ? cs.primary : cs.outline.withOpacity(0.15)),
+                              border: Border.all(
+                                color: isSelected
+                                    ? cs.primary
+                                    : cs.outline.withValues(alpha: 0.15),
+                              ),
                             ),
                             child: Text(
                               m,
                               style: GoogleFonts.poppins(
-                                  fontSize: 10.5,
-                                  fontWeight: FontWeight.w600,
-                                  color: isSelected ? Colors.white : cs.onSurface.withOpacity(0.7),
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w600,
+                                color: isSelected
+                                    ? Colors.white
+                                    : cs.onSurface.withValues(alpha: 0.7),
                               ),
                             ),
                           ),
@@ -1406,15 +1783,31 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
           const SizedBox(height: 12),
           Container(
             margin: const EdgeInsets.symmetric(horizontal: 16),
-            decoration: BoxDecoration(color: cs.surface, borderRadius: BorderRadius.circular(14), border: Border.all(color: cs.outline.withValues(alpha: 0.15))),
+            decoration: BoxDecoration(
+              color: cs.surface,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: cs.outline.withValues(alpha: 0.15)),
+            ),
             child: TabBar(
               controller: _tabController,
-              labelStyle: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 13),
-              unselectedLabelStyle: GoogleFonts.poppins(fontWeight: FontWeight.w400, fontSize: 13),
+              labelStyle: GoogleFonts.poppins(
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+              ),
+              unselectedLabelStyle: GoogleFonts.poppins(
+                fontWeight: FontWeight.w400,
+                fontSize: 13,
+              ),
               labelColor: cs.primary,
               unselectedLabelColor: cs.onSurface.withValues(alpha: 0.5),
-              indicator: BoxDecoration(color: cs.primary.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(10)),
-              tabs: const [Tab(text: 'Add Payment'), Tab(text: 'History')],
+              indicator: BoxDecoration(
+                color: cs.primary.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              tabs: const [
+                Tab(text: 'Add Payment'),
+                Tab(text: 'History'),
+              ],
             ),
           ),
           const SizedBox(height: 4),
@@ -1424,10 +1817,16 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> with SingleTicker
               children: [
                 _isLoading
                     ? const Center(child: CircularProgressIndicator())
-                    : SingleChildScrollView(padding: const EdgeInsets.all(16), child: formSection()),
+                    : SingleChildScrollView(
+                        padding: const EdgeInsets.all(16),
+                        child: formSection(),
+                      ),
                 _isLoading
                     ? const Center(child: CircularProgressIndicator())
-                    : Padding(padding: const EdgeInsets.all(16), child: historySection(useFullHeight: true)),
+                    : Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: historySection(useFullHeight: true),
+                      ),
               ],
             ),
           ),
@@ -1459,7 +1858,10 @@ class _PaymentsQuickView extends StatelessWidget {
       decoration: BoxDecoration(
         color: cs.surface,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: cs.outline.withValues(alpha: 0.12), width: 1.5),
+        border: Border.all(
+          color: cs.outline.withValues(alpha: 0.12),
+          width: 1.5,
+        ),
         boxShadow: [
           BoxShadow(
             color: cs.shadow.withValues(alpha: 0.03),
@@ -1472,9 +1874,21 @@ class _PaymentsQuickView extends StatelessWidget {
         children: [
           _buildStatItem(context, 'Total', total, cs.primary, 'All'),
           _buildDivider(),
-          _buildStatItem(context, 'Collected', collected, AppColors.statusConfirmed, 'Paid'),
+          _buildStatItem(
+            context,
+            'Collected',
+            collected,
+            AppColors.statusConfirmed,
+            'Paid',
+          ),
           _buildDivider(),
-          _buildStatItem(context, 'Pending', pending, AppColors.statusPending, 'Pending'),
+          _buildStatItem(
+            context,
+            'Pending',
+            pending,
+            AppColors.statusPending,
+            'Pending',
+          ),
         ],
       ),
     );
@@ -1484,12 +1898,18 @@ class _PaymentsQuickView extends StatelessWidget {
     return Container(
       height: 32,
       width: 1,
-      color: Colors.grey.withOpacity(0.15),
+      color: Colors.grey.withValues(alpha: 0.15),
       margin: const EdgeInsets.symmetric(horizontal: 4),
     );
   }
 
-  Widget _buildStatItem(BuildContext context, String label, double amount, Color color, String filterValue) {
+  Widget _buildStatItem(
+    BuildContext context,
+    String label,
+    double amount,
+    Color color,
+    String filterValue,
+  ) {
     final isSelected = activeFilter == filterValue;
     final fmt = NumberFormat('PKR #,##0', 'en_US');
     return Expanded(
@@ -1500,10 +1920,10 @@ class _PaymentsQuickView extends StatelessWidget {
           duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            color: isSelected ? color.withOpacity(0.08) : Colors.transparent,
+            color: isSelected ? color.withValues(alpha: 0.08) : Colors.transparent,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: isSelected ? color.withOpacity(0.24) : Colors.transparent,
+              color: isSelected ? color.withValues(alpha: 0.24) : Colors.transparent,
               width: 1,
             ),
           ),
@@ -1517,7 +1937,7 @@ class _PaymentsQuickView extends StatelessWidget {
                     style: GoogleFonts.poppins(
                       fontSize: 10.5,
                       fontWeight: FontWeight.w600,
-                      color: isSelected ? color : color.withOpacity(0.65),
+                      color: isSelected ? color : color.withValues(alpha: 0.65),
                     ),
                   ),
                   if (isSelected) ...[
@@ -1525,9 +1945,12 @@ class _PaymentsQuickView extends StatelessWidget {
                     Container(
                       width: 6,
                       height: 6,
-                      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+                      decoration: BoxDecoration(
+                        color: color,
+                        shape: BoxShape.circle,
+                      ),
                     ),
-                  ]
+                  ],
                 ],
               ),
               const SizedBox(height: 4),

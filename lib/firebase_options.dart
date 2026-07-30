@@ -52,13 +52,15 @@ class DefaultFirebaseOptions {
     appId: '1:473167186593:android:503e8771d55a3ad0a83ee0',
     messagingSenderId: '473167186593',
     projectId: 'gonstead-chiropractic-clinic',
-    databaseURL: 'https://gonstead-chiropractic-clinic-default-rtdb.asia-southeast1.firebasedatabase.app',
+    databaseURL:
+        'https://gonstead-chiropractic-clinic-default-rtdb.asia-southeast1.firebasedatabase.app',
     storageBucket: 'gonstead-chiropractic-clinic.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyDkCEKgwwVORrgrNTm6XWhw5blvlDZcPm8',
-    appId: '1:473167186593:ios:503e8771d55a3ad0a83ee0', // Placeholder using Android suffix
+    appId:
+        '1:473167186593:ios:503e8771d55a3ad0a83ee0', // Placeholder using Android suffix
     messagingSenderId: '473167186593',
     projectId: 'gonstead-chiropractic-clinic',
     storageBucket: 'gonstead-chiropractic-clinic.firebasestorage.app',

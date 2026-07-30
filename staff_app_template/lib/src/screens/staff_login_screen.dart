@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -113,7 +112,7 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               // Header logo / title
-              Icon(Icons.badge_rounded, size: 64, color: Colors.white.withOpacity(0.95)),
+              Icon(Icons.badge_rounded, size: 64, color: Colors.white.withValues(alpha: 0.95)),
               const SizedBox(height: 12),
               Text(
                 'GCT CLINIC',
@@ -142,7 +141,7 @@ class _StaffLoginScreenState extends State<StaffLoginScreen> {
                   borderRadius: BorderRadius.circular(24),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.12),
+                      color: Colors.black.withValues(alpha: 0.12),
                       blurRadius: 20,
                       offset: const Offset(0, 8),
                     ),

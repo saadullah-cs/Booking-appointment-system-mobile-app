@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../models/appointment.dart';
@@ -34,8 +35,15 @@ class AppShellScaffold extends StatefulWidget {
   State<AppShellScaffold> createState() => _AppShellScaffoldState();
 }
 
-class _AppShellScaffoldState extends State<AppShellScaffold> with WidgetsBindingObserver {
-  static const _navRoutes = ['/dashboard', '/booking', '/payments', '/notes', '/profile'];
+class _AppShellScaffoldState extends State<AppShellScaffold>
+    with WidgetsBindingObserver {
+  static const _navRoutes = [
+    '/dashboard',
+    '/booking',
+    '/payments',
+    '/notes',
+    '/profile',
+  ];
   static const Duration _appointmentsCacheTtl = Duration(seconds: 30);
   int _upcomingCount = 0;
   List<Appointment>? _cachedAppointments;
@@ -77,12 +85,17 @@ class _AppShellScaffoldState extends State<AppShellScaffold> with WidgetsBinding
 
     // Verify user session on resume
     try {
-      if (Firebase.apps.isNotEmpty && FirebaseAuth.instance.currentUser != null) {
+      if (Firebase.apps.isNotEmpty &&
+          FirebaseAuth.instance.currentUser != null) {
         try {
           await FirebaseAuth.instance.currentUser!.reload();
         } on FirebaseAuthException catch (e) {
-          debugPrint('Firebase session verification on resume failed (code: ${e.code})');
-          if (e.code == 'user-not-found' || e.code == 'user-disabled' || e.code == 'invalid-credential') {
+          debugPrint(
+            'Firebase session verification on resume failed (code: ${e.code})',
+          );
+          if (e.code == 'user-not-found' ||
+              e.code == 'user-disabled' ||
+              e.code == 'invalid-credential') {
             await FirebaseAuth.instance.signOut();
             final prefs = await AppPreferences.instance.prefs;
             await prefs.remove('local_auth_current_user');
@@ -112,7 +125,10 @@ class _AppShellScaffoldState extends State<AppShellScaffold> with WidgetsBinding
     }
   }
 
-  List<Appointment> _filterUpcomingAppointments(List<Appointment> appointments, {required DateTime now}) {
+  List<Appointment> _filterUpcomingAppointments(
+    List<Appointment> appointments, {
+    required DateTime now,
+  }) {
     return appointments.where((a) {
       final d = a.scheduledAt;
       return d != null &&
@@ -133,7 +149,8 @@ class _AppShellScaffoldState extends State<AppShellScaffold> with WidgetsBinding
 
     try {
       final prefs = await AppPreferences.instance.prefs;
-      final appointmentsRaw = prefs.getString('clinic_booked_appointments') ?? '[]';
+      final appointmentsRaw =
+          prefs.getString('clinic_booked_appointments') ?? '[]';
       final List<dynamic> aptJson = jsonDecode(appointmentsRaw);
       final appointments = aptJson
           .map((e) => Appointment.fromJson(Map<String, dynamic>.from(e as Map)))
@@ -208,7 +225,10 @@ class _AppShellScaffoldState extends State<AppShellScaffold> with WidgetsBinding
                       const SizedBox(width: 8),
                       if (list.isNotEmpty)
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.redAccent,
                             borderRadius: BorderRadius.circular(10),
@@ -237,13 +257,21 @@ class _AppShellScaffoldState extends State<AppShellScaffold> with WidgetsBinding
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.notifications_none_rounded, size: 40, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.3)),
+                            Icon(
+                              Icons.notifications_none_rounded,
+                              size: 40,
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurface.withValues(alpha: 0.3),
+                            ),
                             const SizedBox(height: 8),
                             Text(
                               'No upcoming appointments in the next 24 hours.',
                               style: GoogleFonts.poppins(
                                 fontSize: 13,
-                                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurface.withValues(alpha: 0.5),
                               ),
                             ),
                           ],
@@ -255,13 +283,17 @@ class _AppShellScaffoldState extends State<AppShellScaffold> with WidgetsBinding
                       child: ListView.separated(
                         shrinkWrap: true,
                         itemCount: list.length,
-                        separatorBuilder: (_, __) => const Divider(height: 16),
+                        separatorBuilder: (_, _) => const Divider(height: 16),
                         itemBuilder: (context, index) {
                           final apt = list[index];
-                          final diff = apt.scheduledAt!.difference(DateTime.now());
+                          final diff = apt.scheduledAt!.difference(
+                            DateTime.now(),
+                          );
                           final hours = diff.inHours;
                           final minutes = diff.inMinutes % 60;
-                          final timeStr = hours > 0 ? '$hours hr $minutes min' : '$minutes min';
+                          final timeStr = hours > 0
+                              ? '$hours hr $minutes min'
+                              : '$minutes min';
 
                           return ListTile(
                             contentPadding: EdgeInsets.zero,
@@ -271,23 +303,39 @@ class _AppShellScaffoldState extends State<AppShellScaffold> with WidgetsBinding
                                 color: Colors.orange.withValues(alpha: 0.1),
                                 shape: BoxShape.circle,
                               ),
-                              child: const Icon(Icons.notifications_active_rounded, color: Colors.orange),
+                              child: const Icon(
+                                Icons.notifications_active_rounded,
+                                color: Colors.orange,
+                              ),
                             ),
                             title: Text(
                               apt.patientName,
-                              style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 14),
+                              style: GoogleFonts.poppins(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 14,
+                              ),
                             ),
                             subtitle: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
                                   '${apt.treatmentType}  •  ${apt.time}',
-                                  style: GoogleFonts.poppins(fontSize: 12, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)),
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 12,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurface
+                                        .withValues(alpha: 0.6),
+                                  ),
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
                                   'Upcoming in $timeStr',
-                                  style: GoogleFonts.poppins(fontSize: 11, color: Colors.orange, fontWeight: FontWeight.w600),
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 11,
+                                    color: Colors.orange,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
                               ],
                             ),
@@ -315,116 +363,171 @@ class _AppShellScaffoldState extends State<AppShellScaffold> with WidgetsBinding
     final isWide = MediaQuery.of(context).size.width > 850;
     final showPermanentDrawer = isWide && widget.useDrawer;
 
-    return Scaffold(
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
-        leading: canPop
-            ? IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-                onPressed: () => context.pop(),
-                tooltip: 'Back',
-              )
-            : (widget.useDrawer && !isWide)
-                ? Builder(
-                    builder: (context) => IconButton(
-                      icon: const Icon(Icons.menu_rounded),
-                      onPressed: () => Scaffold.of(context).openDrawer(),
-                      tooltip: 'Open menu',
-                    ),
-                  )
-                : null,
-        titleSpacing: 0,
-        title: Row(
-          children: [
-            if (!canPop && !showPermanentDrawer) ...[
-              Container(
-                width: 32,
-                height: 32,
-                margin: const EdgeInsets.only(right: 10),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(9),
-                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
-                ),
-                padding: const EdgeInsets.all(4),
-                child: Image.asset('assets/ChatGPT Image Jul 9, 2025, 11_09_56 PM.png'),
-              ),
-            ],
-            Expanded(
-              child: Text(
-                widget.title,
-                overflow: TextOverflow.ellipsis,
-              ),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+
+        // 1. If we can pop (sub-screen), pop normally
+        if (canPop) {
+          context.pop();
+          return;
+        }
+
+        // 2. If we are on a secondary tab, go to Dashboard
+        if (widget.currentRoute != '/dashboard' && isNavRoute) {
+          context.go('/dashboard');
+          return;
+        }
+
+        // 3. If we are on Dashboard, show Exit Confirmation
+        final shouldExit = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text(
+              'Exit App',
+              style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
             ),
-          ],
-        ),
-        actions: [
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              IconButton(
-                icon: const Icon(Icons.notifications_outlined),
-                onPressed: () => _showNotificationsSheet(context),
-                tooltip: 'Notifications',
+            content: Text(
+              'Are you sure you want to quit the app?',
+              style: GoogleFonts.poppins(),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
               ),
-              if (_upcomingCount > 0)
-                Positioned(
-                  top: 10,
-                  right: 10,
-                  child: Container(
-                    width: 8,
-                    height: 8,
-                    decoration: const BoxDecoration(
-                      color: Colors.redAccent,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Theme.of(context).colorScheme.error,
+                  foregroundColor: Colors.white,
                 ),
+                child: const Text('Exit'),
+              ),
             ],
           ),
-          ...widget.actions,
-        ],
-      ),
-      drawer: (widget.useDrawer && !isWide) ? _AppDrawer(currentRoute: widget.currentRoute) : null,
-      body: SafeArea(
-        child: showPermanentDrawer
-            ? Row(
-                children: [
-                  SizedBox(
-                    width: 280,
-                    child: _AppDrawer(currentRoute: widget.currentRoute),
+        );
+
+        if (shouldExit == true) {
+          // Trigger system exit
+          SystemNavigator.pop();
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          automaticallyImplyLeading: false,
+          leading: canPop
+              ? IconButton(
+                  icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+                  onPressed: () => context.pop(),
+                  tooltip: 'Back',
+                )
+              : (widget.useDrawer && !isWide)
+              ? Builder(
+                  builder: (context) => IconButton(
+                    icon: const Icon(Icons.menu_rounded),
+                    onPressed: () => Scaffold.of(context).openDrawer(),
+                    tooltip: 'Open menu',
                   ),
-                  const VerticalDivider(width: 1, thickness: 1),
-                  Expanded(
-                    child: Align(
-                      alignment: Alignment.topCenter,
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 1200),
-                        child: widget.body,
+                )
+              : null,
+          titleSpacing: 0,
+          title: Row(
+            children: [
+              if (!canPop && !showPermanentDrawer) ...[
+                Container(
+                  width: 32,
+                  height: 32,
+                  margin: const EdgeInsets.only(right: 10),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(9),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.primary.withValues(alpha: 0.12),
+                  ),
+                  padding: const EdgeInsets.all(4),
+                  child: Image.asset(
+                    'assets/ChatGPT Image Jul 9, 2025, 11_09_56 PM.png',
+                  ),
+                ),
+              ],
+              Expanded(
+                child: Text(widget.title, overflow: TextOverflow.ellipsis),
+              ),
+            ],
+          ),
+          actions: [
+            Stack(
+              alignment: Alignment.center,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.notifications_outlined),
+                  onPressed: () => _showNotificationsSheet(context),
+                  tooltip: 'Notifications',
+                ),
+                if (_upcomingCount > 0)
+                  Positioned(
+                    top: 10,
+                    right: 10,
+                    child: Container(
+                      width: 8,
+                      height: 8,
+                      decoration: const BoxDecoration(
+                        color: Colors.redAccent,
+                        shape: BoxShape.circle,
                       ),
                     ),
                   ),
-                ],
-              )
-            : Align(
-                alignment: Alignment.topCenter,
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 900),
-                  child: widget.body,
+              ],
+            ),
+            ...widget.actions,
+          ],
+        ),
+        drawer: (widget.useDrawer && !isWide)
+            ? _AppDrawer(currentRoute: widget.currentRoute)
+            : null,
+        body: SafeArea(
+          child: showPermanentDrawer
+              ? Row(
+                  children: [
+                    SizedBox(
+                      width: 280,
+                      child: _AppDrawer(currentRoute: widget.currentRoute),
+                    ),
+                    const VerticalDivider(width: 1, thickness: 1),
+                    Expanded(
+                      child: Align(
+                        alignment: Alignment.topCenter,
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 1200),
+                          child: widget.body,
+                        ),
+                      ),
+                    ),
+                  ],
+                )
+              : Align(
+                  alignment: Alignment.topCenter,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 900),
+                    child: widget.body,
+                  ),
                 ),
-              ),
+        ),
+        floatingActionButton: widget.floatingActionButton,
+        bottomNavigationBar: (isNavRoute && !isWide)
+            ? _AppBottomNav(
+                currentIndex: _navIndex,
+                onTap: (index) {
+                  final route = _navRoutes[index];
+                  if (route != widget.currentRoute) {
+                    context.go(route);
+                  }
+                },
+              )
+            : (!isWide ? widget.bottomNavigationBar : null),
       ),
-      floatingActionButton: widget.floatingActionButton,
-      bottomNavigationBar: (isNavRoute && !isWide)
-          ? _AppBottomNav(
-              currentIndex: _navIndex,
-              onTap: (index) {
-                final route = _navRoutes[index];
-                if (route != widget.currentRoute) {
-                  context.go(route);
-                }
-              },
-            )
-          : (!isWide ? widget.bottomNavigationBar : null),
     );
   }
 }
@@ -504,10 +607,14 @@ class _AppDrawer extends StatelessWidget {
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(14),
                     color: Colors.white.withValues(alpha: 0.2),
-                    border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.3),
+                    ),
                   ),
                   padding: const EdgeInsets.all(8),
-                  child: Image.asset('assets/ChatGPT Image Jul 9, 2025, 11_09_56 PM.png'),
+                  child: Image.asset(
+                    'assets/ChatGPT Image Jul 9, 2025, 11_09_56 PM.png',
+                  ),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -538,77 +645,92 @@ class _AppDrawer extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Expanded(
-            child: ListView(
+            child: ListView.builder(
               padding: const EdgeInsets.symmetric(horizontal: 12),
-              children: [
-                _DrawerTile(
-                  icon: Icons.dashboard_rounded,
-                  label: 'Dashboard',
-                  selected: currentRoute == '/dashboard',
-                  onTap: () => _navigate(context, '/dashboard'),
-                ),
-                _DrawerTile(
-                  icon: Icons.event_available_rounded,
-                  label: 'Book Appointment',
-                  selected: currentRoute == '/booking',
-                  onTap: () => _navigate(context, '/booking'),
-                ),
-                _DrawerTile(
-                  icon: Icons.list_alt_rounded,
-                  label: 'All Appointments',
-                  selected: currentRoute == '/appointments',
-                  onTap: () => _navigate(context, '/appointments'),
-                ),
-                _DrawerTile(
-                  icon: Icons.analytics_rounded,
-                  label: 'Analytics',
-                  selected: currentRoute == '/analytics',
-                  onTap: () => _navigate(context, '/analytics'),
-                ),
-                _DrawerTile(
-                  icon: Icons.biotech_rounded,
-                  label: 'AI Vision Analyzer',
-                  selected: currentRoute == '/vision-analyzer',
-                  onTap: () => _navigate(context, '/vision-analyzer'),
-                ),
-                _DrawerTile(
-                  icon: Icons.account_balance_wallet_rounded,
-                  label: 'Payments',
-                  selected: currentRoute == '/payments',
-                  onTap: () => _navigate(context, '/payments'),
-                ),
-                _DrawerTile(
-                  icon: Icons.calculate_rounded,
-                  label: 'Calculator',
-                  selected: currentRoute == '/calculator',
-                  onTap: () => _navigate(context, '/calculator'),
-                ),
-                _DrawerTile(
-                  icon: Icons.book_rounded,
-                  label: 'Clinical Notes',
-                  selected: currentRoute == '/notes',
-                  onTap: () => _navigate(context, '/notes'),
-                ),
-                _DrawerTile(
-                  icon: Icons.history_rounded,
-                  label: 'Patient History',
-                  selected: currentRoute == '/patient-history',
-                  onTap: () => _navigate(context, '/patient-history'),
-                ),
-                _DrawerTile(
-                  icon: Icons.forum_rounded,
-                  label: 'Clinic Chat',
-                  selected: currentRoute == '/chat',
-                  onTap: () => _navigate(context, '/chat'),
-                ),
-                _DrawerTile(
-                  icon: Icons.person_rounded,
-                  label: 'Profile',
-                  selected: currentRoute == '/profile',
-                  onTap: () => _navigate(context, '/profile'),
-                ),
-                const Divider(height: 24),
-              ],
+              itemCount: 11, // Number of items
+              itemBuilder: (context, index) {
+                switch (index) {
+                  case 0:
+                    return _DrawerTile(
+                      icon: Icons.dashboard_rounded,
+                      label: 'Dashboard',
+                      selected: currentRoute == '/dashboard',
+                      onTap: () => _navigate(context, '/dashboard'),
+                    );
+                  case 1:
+                    return _DrawerTile(
+                      icon: Icons.event_available_rounded,
+                      label: 'Book Appointment',
+                      selected: currentRoute == '/booking',
+                      onTap: () => _navigate(context, '/booking'),
+                    );
+                  case 2:
+                    return _DrawerTile(
+                      icon: Icons.list_alt_rounded,
+                      label: 'All Appointments',
+                      selected: currentRoute == '/appointments',
+                      onTap: () => _navigate(context, '/appointments'),
+                    );
+                  case 3:
+                    return _DrawerTile(
+                      icon: Icons.analytics_rounded,
+                      label: 'Analytics',
+                      selected: currentRoute == '/analytics',
+                      onTap: () => _navigate(context, '/analytics'),
+                    );
+                  case 4:
+                    return _DrawerTile(
+                      icon: Icons.biotech_rounded,
+                      label: 'AI Vision Analyzer',
+                      selected: currentRoute == '/vision-analyzer',
+                      onTap: () => _navigate(context, '/vision-analyzer'),
+                    );
+                  case 5:
+                    return _DrawerTile(
+                      icon: Icons.account_balance_wallet_rounded,
+                      label: 'Payments',
+                      selected: currentRoute == '/payments',
+                      onTap: () => _navigate(context, '/payments'),
+                    );
+                  case 6:
+                    return _DrawerTile(
+                      icon: Icons.calculate_rounded,
+                      label: 'Calculator',
+                      selected: currentRoute == '/calculator',
+                      onTap: () => _navigate(context, '/calculator'),
+                    );
+                  case 7:
+                    return _DrawerTile(
+                      icon: Icons.book_rounded,
+                      label: 'Clinical Notes',
+                      selected: currentRoute == '/notes',
+                      onTap: () => _navigate(context, '/notes'),
+                    );
+                  case 8:
+                    return _DrawerTile(
+                      icon: Icons.history_rounded,
+                      label: 'Patient History',
+                      selected: currentRoute == '/patient-history',
+                      onTap: () => _navigate(context, '/patient-history'),
+                    );
+                  case 9:
+                    return _DrawerTile(
+                      icon: Icons.forum_rounded,
+                      label: 'Clinic Chat',
+                      selected: currentRoute == '/chat',
+                      onTap: () => _navigate(context, '/chat'),
+                    );
+                  case 10:
+                    return _DrawerTile(
+                      icon: Icons.person_rounded,
+                      label: 'Profile',
+                      selected: currentRoute == '/profile',
+                      onTap: () => _navigate(context, '/profile'),
+                    );
+                  default:
+                    return const SizedBox.shrink();
+                }
+              },
             ),
           ),
         ],
@@ -647,7 +769,9 @@ class _DrawerTile extends StatelessWidget {
     return ListTile(
       leading: Icon(
         icon,
-        color: selected ? colors.primary : colors.onSurface.withValues(alpha: 0.55),
+        color: selected
+            ? colors.primary
+            : colors.onSurface.withValues(alpha: 0.55),
         size: 22,
       ),
       title: Text(
@@ -655,7 +779,9 @@ class _DrawerTile extends StatelessWidget {
         style: GoogleFonts.poppins(
           fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
           fontSize: 14,
-          color: selected ? colors.primary : colors.onSurface.withValues(alpha: 0.8),
+          color: selected
+              ? colors.primary
+              : colors.onSurface.withValues(alpha: 0.8),
         ),
       ),
       selected: selected,

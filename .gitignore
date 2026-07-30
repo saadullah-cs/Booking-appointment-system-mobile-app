@@ -46,3 +46,6 @@ app.*.map.json
 
 # Heap dumps and profiling artifacts
 *.hprof
+
+# Environment Variables (Security)
+.env

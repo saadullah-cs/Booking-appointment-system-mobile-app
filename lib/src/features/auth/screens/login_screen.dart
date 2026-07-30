@@ -14,7 +14,8 @@ class LoginScreen extends ConsumerStatefulWidget {
   ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends ConsumerState<LoginScreen> with SingleTickerProviderStateMixin {
+class _LoginScreenState extends ConsumerState<LoginScreen>
+    with SingleTickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -28,10 +29,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with SingleTickerProv
   @override
   void initState() {
     super.initState();
-    _animController = AnimationController(vsync: this, duration: const Duration(milliseconds: 700));
+    _animController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 700),
+    );
     _fadeAnim = CurvedAnimation(parent: _animController, curve: Curves.easeOut);
     _slideAnim = Tween<Offset>(begin: const Offset(0, 0.15), end: Offset.zero)
-        .animate(CurvedAnimation(parent: _animController, curve: Curves.easeOutCubic));
+        .animate(
+          CurvedAnimation(parent: _animController, curve: Curves.easeOutCubic),
+        );
     _animController.forward();
   }
 
@@ -47,7 +53,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with SingleTickerProv
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
     try {
-      await ref.read(authRepositoryProvider).signInWithEmail(
+      await ref
+          .read(authRepositoryProvider)
+          .signInWithEmail(
             email: _emailController.text.trim(),
             password: _passwordController.text.trim(),
           );
@@ -62,7 +70,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with SingleTickerProv
       if (mounted) setState(() => _isLoading = false);
     }
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -94,7 +101,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with SingleTickerProv
                 height: size.width * 0.9,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: cs.primary.withOpacity(isDark ? 0.03 : 0.04),
+                  color: cs.primary.withValues(alpha: isDark ? 0.03 : 0.04),
                 ),
               ),
             ),
@@ -106,7 +113,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with SingleTickerProv
                 height: size.width * 0.8,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: cs.primary.withOpacity(isDark ? 0.02 : 0.03),
+                  color: cs.primary.withValues(alpha: isDark ? 0.02 : 0.03),
                 ),
               ),
             ),
@@ -114,7 +121,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with SingleTickerProv
             SafeArea(
               child: Center(
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 16,
+                  ),
                   child: FadeTransition(
                     opacity: _fadeAnim,
                     child: SlideTransition(
@@ -132,13 +142,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with SingleTickerProv
                                 borderRadius: BorderRadius.circular(24),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: cs.primary.withOpacity(0.12),
+                                    color: cs.primary.withValues(alpha: 0.12),
                                     blurRadius: 20,
                                     offset: const Offset(0, 8),
                                   ),
                                 ],
                                 border: Border.all(
-                                  color: cs.primary.withOpacity(0.08),
+                                  color: cs.primary.withValues(alpha: 0.08),
                                   width: 1.5,
                                 ),
                               ),
@@ -146,7 +156,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with SingleTickerProv
                               child: Image.asset(
                                 'assets/ChatGPT Image Jul 9, 2025, 11_09_56 PM.png',
                                 fit: BoxFit.contain,
-                                errorBuilder: (_, __, ___) => Icon(
+                                errorBuilder: (_, _, _) => Icon(
                                   Icons.local_hospital_rounded,
                                   color: cs.primary,
                                   size: 40,
@@ -172,7 +182,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with SingleTickerProv
                             'Sign in to access appointments, notes, and your care dashboard.',
                             style: GoogleFonts.poppins(
                               fontSize: 14,
-                              color: cs.onSurface.withOpacity(0.6),
+                              color: cs.onSurface.withValues(alpha: 0.6),
                               height: 1.5,
                             ),
                             textAlign: TextAlign.center,
@@ -193,7 +203,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with SingleTickerProv
                                     keyboardType: TextInputType.emailAddress,
                                     decoration: const InputDecoration(
                                       hintText: 'Email address',
-                                      prefixIcon: Icon(Icons.mail_outline_rounded),
+                                      prefixIcon: Icon(
+                                        Icons.mail_outline_rounded,
+                                      ),
                                     ),
                                     validator: Validators.email,
                                   ),
@@ -205,14 +217,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with SingleTickerProv
                                     obscureText: _obscurePassword,
                                     decoration: InputDecoration(
                                       hintText: 'Password',
-                                      prefixIcon: const Icon(Icons.lock_outline_rounded),
+                                      prefixIcon: const Icon(
+                                        Icons.lock_outline_rounded,
+                                      ),
                                       suffixIcon: IconButton(
                                         icon: Icon(
                                           _obscurePassword
                                               ? Icons.visibility_off_outlined
                                               : Icons.visibility_outlined,
                                         ),
-                                        onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                                        onPressed: () => setState(
+                                          () => _obscurePassword =
+                                              !_obscurePassword,
+                                        ),
                                       ),
                                     ),
                                     validator: Validators.password,
@@ -223,7 +240,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with SingleTickerProv
                                   SizedBox(
                                     height: 52,
                                     child: ElevatedButton(
-                                      onPressed: _isLoading ? null : _loginWithEmail,
+                                      onPressed: _isLoading
+                                          ? null
+                                          : _loginWithEmail,
                                       child: _isLoading
                                           ? const SizedBox(
                                               width: 22,
@@ -239,29 +258,46 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with SingleTickerProv
                                   const SizedBox(height: 18),
                                   Row(
                                     children: [
-                                      Expanded(child: Divider(color: cs.onSurface.withOpacity(0.12))),
+                                      Expanded(
+                                        child: Divider(
+                                          color: cs.onSurface.withValues(alpha: 0.12),
+                                        ),
+                                      ),
                                       Padding(
-                                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                        ),
                                         child: Text(
                                           'OR',
                                           style: GoogleFonts.poppins(
                                             fontSize: 10.5,
-                                            color: cs.onSurface.withOpacity(0.4),
+                                            color: cs.onSurface.withValues(
+                                              alpha: 0.4,
+                                            ),
                                             fontWeight: FontWeight.bold,
                                           ),
                                         ),
                                       ),
-                                      Expanded(child: Divider(color: cs.onSurface.withOpacity(0.12))),
+                                      Expanded(
+                                        child: Divider(
+                                          color: cs.onSurface.withValues(alpha: 0.12),
+                                        ),
+                                      ),
                                     ],
                                   ),
                                   const SizedBox(height: 14),
                                   TextButton.icon(
                                     onPressed: () => context.go('/staff-login'),
-                                    icon: const Icon(Icons.badge_rounded, size: 18),
+                                    icon: const Icon(
+                                      Icons.badge_rounded,
+                                      size: 18,
+                                    ),
                                     label: const Text('Staff Access Portal'),
                                     style: TextButton.styleFrom(
                                       foregroundColor: cs.primary,
-                                      padding: const EdgeInsets.symmetric(vertical: 12),
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 12,
+                                      ),
                                     ),
                                   ),
                                 ],

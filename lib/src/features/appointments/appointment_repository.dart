@@ -21,7 +21,8 @@ class AppointmentRepository {
 
   bool get _useFirestore {
     try {
-      return Firebase.apps.isNotEmpty && FirebaseAuth.instance.currentUser != null;
+      return Firebase.apps.isNotEmpty &&
+          FirebaseAuth.instance.currentUser != null;
     } catch (_) {
       return false;
     }
@@ -29,7 +30,9 @@ class AppointmentRepository {
 
   Future<List<Appointment>> loadAppointments() async {
     final now = DateTime.now();
-    if (_cachedAppointments != null && _cachedAt != null && now.difference(_cachedAt!) < _cacheTtl) {
+    if (_cachedAppointments != null &&
+        _cachedAt != null &&
+        now.difference(_cachedAt!) < _cacheTtl) {
       return List<Appointment>.unmodifiable(_cachedAppointments!);
     }
 
@@ -66,7 +69,10 @@ class AppointmentRepository {
 
     final decoded = jsonDecode(raw) as List<dynamic>;
     final appointments = decoded
-        .map((entry) => Appointment.fromJson(Map<String, dynamic>.from(entry as Map)))
+        .map(
+          (entry) =>
+              Appointment.fromJson(Map<String, dynamic>.from(entry as Map)),
+        )
         .toList(growable: false);
     _cachedAppointments = appointments;
     _cachedAt = now;
@@ -75,21 +81,30 @@ class AppointmentRepository {
 
   Future<void> _saveAppointments(List<Appointment> appointments) async {
     final prefs = await _prefsFuture;
-    final encoded = jsonEncode(appointments.map((item) => item.toJson()).toList());
+    final encoded = jsonEncode(
+      appointments.map((item) => item.toJson()).toList(),
+    );
     await prefs.setString(_appointmentsKey, encoded);
     _cachedAppointments = List<Appointment>.unmodifiable(appointments);
     _cachedAt = DateTime.now();
   }
 
-  Future<void> saveAppointment(Appointment appointment) async {
+  Future<bool> saveAppointment(Appointment appointment) async {
+    bool remoteSuccess = true;
     if (_useFirestore) {
       try {
+        // Wrap with 3s timeout for offline optimism
         await FirebaseFirestore.instance
             .collection('appointments')
             .doc(appointment.id)
-            .set(appointment.toJson());
+            .set(appointment.toJson())
+            .timeout(const Duration(seconds: 3));
       } catch (error) {
-        debugPrint('Failed to save appointment to Firestore: $error');
+        debugPrint(
+          'Firestore save error or timeout (proceeding offline): $error',
+        );
+        remoteSuccess = false;
+        // We catch the error so the local cache still updates
       }
     }
     // Invalidate the cache to ensure we reload fresh list
@@ -100,6 +115,7 @@ class AppointmentRepository {
     final filtered = appointments.where((a) => a.id != appointment.id).toList();
     final next = [appointment, ...filtered];
     await _saveAppointments(next);
+    return remoteSuccess;
   }
 
   Future<Appointment?> findById(String id) async {
@@ -141,7 +157,10 @@ class AppointmentRepository {
     _cachedAt = null;
     final appointments = await loadAppointments();
     final next = appointments
-        .map((item) => item.id == updatedAppointment.id ? updatedAppointment : item)
+        .map(
+          (item) =>
+              item.id == updatedAppointment.id ? updatedAppointment : item,
+        )
         .toList(growable: false);
     await _saveAppointments(next);
   }

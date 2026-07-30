@@ -10,13 +10,11 @@ import '../utils/import_export_service.dart';
 import '../../services/app_preferences.dart';
 import 'package:uuid/uuid.dart';
 import 'package:url_launcher/url_launcher_string.dart';
-import 'package:printing/printing.dart';
 
 import '../../features/auth/auth_providers.dart';
 import '../../models/app_user.dart';
 import '../../models/appointment.dart';
 import '../appointments/appointment_repository.dart';
-import '../appointments/pdf_generator.dart';
 import '../shared/widgets/app_shell_scaffold.dart';
 import '../shared/widgets/premium_card.dart';
 import '../../theme/app_theme.dart';
@@ -25,6 +23,7 @@ import '../../models/payment.dart';
 import '../notes/clinical_notes_repository.dart';
 import '../../services/repository_providers.dart';
 import '../../services/notification_service.dart';
+import '../../services/payment_gateway_service.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
@@ -34,8 +33,10 @@ class DashboardScreen extends ConsumerStatefulWidget {
 }
 
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
-  AppointmentRepository get _repository => ref.read(appointmentRepositoryProvider);
-  PaymentRepository get _paymentRepository => ref.read(paymentRepositoryProvider);
+  AppointmentRepository get _repository =>
+      ref.read(appointmentRepositoryProvider);
+  PaymentRepository get _paymentRepository =>
+      ref.read(paymentRepositoryProvider);
   List<Appointment> _appointments = [];
   List<Payment> _payments = [];
   bool _isLoading = false;
@@ -52,9 +53,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   Future<void> _exportMasterBackup() async {
     try {
       final prefs = await AppPreferences.instance.prefs;
-      
+
       // Parse Appointments
-      final appointmentsRaw = prefs.getString('clinic_booked_appointments') ?? '[]';
+      final appointmentsRaw =
+          prefs.getString('clinic_booked_appointments') ?? '[]';
       final List<dynamic> aptJson = jsonDecode(appointmentsRaw);
       final aptHeader = [
         'Appointment ID',
@@ -69,7 +71,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         'Reason for Visit',
         'Clinical Notes',
         'Cancellation Reason',
-        'Last Updated'
+        'Last Updated',
       ];
       final aptRows = <List<dynamic>>[aptHeader];
       for (final item in aptJson) {
@@ -78,7 +80,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           map['id'] ?? '',
           map['patientName'] ?? '',
           map['patientProfession'] ?? '',
-          map['scheduledAt'] != null ? DateFormat('yyyy-MM-dd HH:mm').format(DateTime.parse(map['scheduledAt'])) : (map['time'] ?? ''),
+          map['scheduledAt'] != null
+              ? DateFormat(
+                  'yyyy-MM-dd HH:mm',
+                ).format(DateTime.parse(map['scheduledAt']))
+              : (map['time'] ?? ''),
           map['treatmentType'] ?? '',
           map['phoneNumber'] ?? '',
           map['email'] ?? '',
@@ -87,14 +93,26 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           map['visitReason'] ?? '',
           map['patientNote'] ?? '',
           map['cancellationReason'] ?? '',
-          map['updatedAt'] != null ? DateFormat('yyyy-MM-dd HH:mm').format(DateTime.parse(map['updatedAt'])) : '',
+          map['updatedAt'] != null
+              ? DateFormat(
+                  'yyyy-MM-dd HH:mm',
+                ).format(DateTime.parse(map['updatedAt']))
+              : '',
         ]);
       }
 
       // Parse Payments
       final paymentsRaw = prefs.getString('clinic_patient_payments') ?? '[]';
       final List<dynamic> payJson = jsonDecode(paymentsRaw);
-      final payHeader = ['Payment ID', 'Patient Name', 'Amount (PKR)', 'Payment Method', 'Status', 'Note/Details', 'Payment Date'];
+      final payHeader = [
+        'Payment ID',
+        'Patient Name',
+        'Amount (PKR)',
+        'Payment Method',
+        'Status',
+        'Note/Details',
+        'Payment Date',
+      ];
       final payRows = <List<dynamic>>[payHeader];
       for (final item in payJson) {
         final map = Map<String, dynamic>.from(item as Map);
@@ -105,14 +123,24 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           map['method'] ?? '',
           map['status'] ?? '',
           map['note'] ?? '',
-          map['paidAt'] != null ? DateFormat('yyyy-MM-dd HH:mm').format(DateTime.parse(map['paidAt'])) : '',
+          map['paidAt'] != null
+              ? DateFormat(
+                  'yyyy-MM-dd HH:mm',
+                ).format(DateTime.parse(map['paidAt']))
+              : '',
         ]);
       }
 
       // Parse Clinical Notes
       final notesRaw = prefs.getString('clinic_clinical_notes') ?? '[]';
       final List<dynamic> notesJson = jsonDecode(notesRaw);
-      final notesHeader = ['Note ID', 'Patient Name', 'Clinical Note', 'Category', 'Created At'];
+      final notesHeader = [
+        'Note ID',
+        'Patient Name',
+        'Clinical Note',
+        'Category',
+        'Created At',
+      ];
       final notesRows = <List<dynamic>>[notesHeader];
       for (final item in notesJson) {
         final map = Map<String, dynamic>.from(item as Map);
@@ -121,7 +149,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           map['patientName'] ?? '',
           map['note'] ?? '',
           map['category'] ?? '',
-          map['createdAt'] != null ? DateFormat('yyyy-MM-dd HH:mm').format(DateTime.parse(map['createdAt'])) : '',
+          map['createdAt'] != null
+              ? DateFormat(
+                  'yyyy-MM-dd HH:mm',
+                ).format(DateTime.parse(map['createdAt']))
+              : '',
         ]);
       }
 
@@ -137,7 +169,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
       if (success && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Master Export to Excel successfully exported! 💾')),
+          const SnackBar(
+            content: Text('Master Export to Excel successfully exported! 💾'),
+          ),
         );
       }
     } catch (e) {
@@ -157,7 +191,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       final prefs = await AppPreferences.instance.prefs;
 
       // 1. Import Appointments
-      final aptRows = ImportExportService.parseSheet(excel: excel, sheetName: 'Appointments');
+      final aptRows = ImportExportService.parseSheet(
+        excel: excel,
+        sheetName: 'Appointments',
+      );
       if (aptRows.isNotEmpty) {
         final List<Appointment> importedApts = [];
         for (final row in aptRows) {
@@ -172,29 +209,34 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           final priority = row['Priority']?.toString() ?? 'Standard';
           final visitReason = row['Reason for Visit']?.toString() ?? '';
           final patientNote = row['Clinical Notes']?.toString() ?? '';
-          final cancellationReason = row['Cancellation Reason']?.toString() ?? '';
+          final cancellationReason =
+              row['Cancellation Reason']?.toString() ?? '';
           final updatedRaw = row['Last Updated']?.toString() ?? '';
 
           DateTime? scheduledAt = DateTime.tryParse(scheduledRaw);
           DateTime? updatedAt = DateTime.tryParse(updatedRaw);
 
           if (patientName.isNotEmpty) {
-            importedApts.add(Appointment(
-              id: id.isNotEmpty ? id : Uuid().v4(),
-              patientName: patientName,
-              patientProfession: patientProfession,
-              scheduledAt: scheduledAt,
-              time: scheduledAt != null ? DateFormat('hh:mm a').format(scheduledAt) : scheduledRaw,
-              treatmentType: treatmentType,
-              phoneNumber: phoneNumber,
-              email: email,
-              status: status,
-              isEmergency: priority == 'EMERGENCY',
-              visitReason: visitReason,
-              patientNote: patientNote,
-              cancellationReason: cancellationReason,
-              updatedAt: updatedAt,
-            ));
+            importedApts.add(
+              Appointment(
+                id: id.isNotEmpty ? id : Uuid().v4(),
+                patientName: patientName,
+                patientProfession: patientProfession,
+                scheduledAt: scheduledAt,
+                time: scheduledAt != null
+                    ? DateFormat('hh:mm a').format(scheduledAt)
+                    : scheduledRaw,
+                treatmentType: treatmentType,
+                phoneNumber: phoneNumber,
+                email: email,
+                status: status,
+                isEmergency: priority == 'EMERGENCY',
+                visitReason: visitReason,
+                patientNote: patientNote,
+                cancellationReason: cancellationReason,
+                updatedAt: updatedAt,
+              ),
+            );
           }
         }
         await prefs.setString(
@@ -204,13 +246,17 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       }
 
       // 2. Import Payments
-      final payRows = ImportExportService.parseSheet(excel: excel, sheetName: 'Payments');
+      final payRows = ImportExportService.parseSheet(
+        excel: excel,
+        sheetName: 'Payments',
+      );
       if (payRows.isNotEmpty) {
         final List<Payment> importedPays = [];
         for (final row in payRows) {
           final id = row['Payment ID']?.toString() ?? '';
           final patientName = row['Patient Name']?.toString() ?? '';
-          final amount = double.tryParse(row['Amount (PKR)']?.toString() ?? '0') ?? 0.0;
+          final amount =
+              double.tryParse(row['Amount (PKR)']?.toString() ?? '0') ?? 0.0;
           final method = row['Payment Method']?.toString() ?? 'Cash';
           final status = row['Status']?.toString() ?? 'Paid';
           final note = row['Note/Details']?.toString() ?? '';
@@ -220,16 +266,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
           if (patientName.isNotEmpty) {
             final double pAmt = status.toLowerCase() == 'paid' ? amount : 0.0;
-            importedPays.add(Payment(
-              id: id.isNotEmpty ? id : Uuid().v4(),
-              patientName: patientName,
-              amount: amount,
-              paidAmount: pAmt,
-              paidAt: paidAt,
-              method: method,
-              status: status,
-              note: note,
-            ));
+            importedPays.add(
+              Payment(
+                id: id.isNotEmpty ? id : Uuid().v4(),
+                patientName: patientName,
+                amount: amount,
+                paidAmount: pAmt,
+                paidAt: paidAt,
+                method: method,
+                status: status,
+                note: note,
+              ),
+            );
           }
         }
         await prefs.setString(
@@ -239,7 +287,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       }
 
       // 3. Import Clinical Notes
-      final noteRows = ImportExportService.parseSheet(excel: excel, sheetName: 'Clinical Notes');
+      final noteRows = ImportExportService.parseSheet(
+        excel: excel,
+        sheetName: 'Clinical Notes',
+      );
       if (noteRows.isNotEmpty) {
         final List<ClinicalNote> importedNotes = [];
         for (final row in noteRows) {
@@ -252,13 +303,15 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           DateTime createdAt = DateTime.tryParse(createdRaw) ?? DateTime.now();
 
           if (patientName.isNotEmpty) {
-            importedNotes.add(ClinicalNote(
-              id: id.isNotEmpty ? id : Uuid().v4(),
-              patientName: patientName,
-              note: note,
-              category: category,
-              createdAt: createdAt,
-            ));
+            importedNotes.add(
+              ClinicalNote(
+                id: id.isNotEmpty ? id : Uuid().v4(),
+                patientName: patientName,
+                note: note,
+                category: category,
+                createdAt: createdAt,
+              ),
+            );
           }
         }
         await prefs.setString(
@@ -270,13 +323,63 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       await _loadAppointments();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Master Backup restored successfully! 🔄')),
+          const SnackBar(
+            content: Text('Master Backup restored successfully! 🔄'),
+          ),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Master Restore failed: ${e.toString()}')),
+        );
+      }
+    }
+  }
+
+  Future<void> _retryPayment(Appointment apt) async {
+    final payService = PaymentGatewayService();
+    try {
+      final res = await payService.initializeSafepayTransaction(
+        amount: apt.amount,
+        currency: 'PKR',
+        customerEmail: apt.email,
+      );
+
+      if (payService.safepayKey.isEmpty ||
+          payService.safepayKey.contains('your_safepay_api_key')) {
+        if (mounted) {
+          await showDialog(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Payment Gateway - Test Mode'),
+              content: const Text(
+                'The online payment gateway is currently in Test Mode (Key unconfigured in .env). '
+                'In production, this would launch the secure Safepay/PayFast checkout screen.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Continue with Simulation'),
+                ),
+              ],
+            ),
+          );
+        }
+      } else {
+        final url = Uri.parse(res['checkoutUrl'] ?? '');
+        if (await canLaunchUrlString(url.toString())) {
+          await launchUrlString(
+            url.toString(),
+            mode: LaunchMode.externalApplication,
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('Retry Payment failed: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Payment initialization failed: $e')),
         );
       }
     }
@@ -291,7 +394,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   Future<void> _loadAppointments() async {
     final appointments = await _repository.loadAppointments();
     final payments = await _paymentRepository.loadPayments();
-    
+
     // Sync scheduled notifications in background on dashboard load
     unawaited(NotificationService().syncScheduledNotifications(appointments));
     unawaited(NotificationService().syncPaymentReminders(payments));
@@ -300,9 +403,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     if (!mounted) return;
     final user = ref.read(authStateProvider).asData?.value;
     if (user != null && user.email.isNotEmpty) {
-      unawaited(FirebaseFirestore.instance.collection('settings').doc('clinic_config').set({
-        'doctorEmail': user.email.trim().toLowerCase(),
-      }, SetOptions(merge: true)));
+      unawaited(
+        FirebaseFirestore.instance
+            .collection('settings')
+            .doc('clinic_config')
+            .set({
+              'doctorEmail': user.email.trim().toLowerCase(),
+            }, SetOptions(merge: true)),
+      );
     }
 
     // THE MATH ADDITION:
@@ -314,16 +422,26 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       _payments = payments;
 
       _totalApts = appointments.length;
-      _confirmedApts = appointments.where((a) => a.status.toLowerCase() == 'confirmed').length;
-      _pendingApts = appointments.where((a) => a.status.toLowerCase() == 'pending').length;
+      _confirmedApts = appointments
+          .where((a) => a.status.toLowerCase() == 'confirmed')
+          .length;
+      _pendingApts = appointments
+          .where((a) => a.status.toLowerCase() == 'pending')
+          .length;
 
-      _totalPaid = payments.fold<double>(0, (s, p) => s + p.paidAmount);
-      _totalPending = payments.fold<double>(0, (s, p) => s + (p.amount - p.paidAmount));
-      _totalAll = payments.fold<double>(0, (s, p) => s + p.amount);
+      // Compute revenue from Appointment model as requested
+      _totalPaid = appointments
+          .where((a) => a.paymentStatus.toLowerCase() == 'paid')
+          .fold<double>(0, (sum, a) => sum + a.amount);
+      _totalPending = appointments
+          .where((a) => a.paymentStatus.toLowerCase() == 'pending')
+          .fold<double>(0, (sum, a) => sum + a.amount);
+      _totalAll = appointments.fold<double>(0, (sum, a) => sum + a.amount);
 
       _todayAppointments = appointments.where((a) {
         if (a.scheduledAt == null) return false;
-        return DateFormat('yyyy-MM-dd').format(a.scheduledAt!.toLocal()) == todayStr;
+        return DateFormat('yyyy-MM-dd').format(a.scheduledAt!.toLocal()) ==
+            todayStr;
       }).toList()..sort((a, b) => a.scheduledAt!.compareTo(b.scheduledAt!));
 
       _isLoading = false;
@@ -338,15 +456,19 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final now = DateTime.now();
     final upcoming = _appointments.where((a) {
       final d = a.scheduledAt;
-      return d != null && d.isAfter(now) && a.status.toLowerCase() != 'cancelled';
-    }).toList()
-      ..sort((a, b) => a.scheduledAt!.compareTo(b.scheduledAt!));
+      return d != null &&
+          d.isAfter(now) &&
+          a.status.toLowerCase() != 'cancelled';
+    }).toList()..sort((a, b) => a.scheduledAt!.compareTo(b.scheduledAt!));
     return upcoming.isNotEmpty ? upcoming.first : null;
   }
 
   Widget _PaymentRemindersBanner(ColorScheme cs) {
-    final outstanding = _payments.where((p) => p.status != 'Paid' && p.reminderDate != null).toList()
-      ..sort((a, b) => a.reminderDate!.compareTo(b.reminderDate!));
+    final outstanding =
+        _payments
+            .where((p) => p.status != 'Paid' && p.reminderDate != null)
+            .toList()
+          ..sort((a, b) => a.reminderDate!.compareTo(b.reminderDate!));
     if (outstanding.isEmpty) return const SizedBox.shrink();
 
     final fmt = NumberFormat.currency(symbol: 'PKR ');
@@ -368,7 +490,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 const SizedBox(width: 8),
                 Text(
                   'Payment Reminders',
-                  style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 13, color: Colors.red.shade900),
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                    color: Colors.red.shade900,
+                  ),
                 ),
               ],
             ),
@@ -396,8 +522,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authStateProvider);
-    final user = authState.asData?.value ??
-        AppUser(uid: 'guest', email: 'guest@gonstead.com', displayName: 'Guest', phoneNumber: '');
+    final user =
+        authState.asData?.value ??
+        AppUser(
+          uid: 'guest',
+          email: 'guest@gonstead.com',
+          displayName: 'Guest',
+          phoneNumber: '',
+        );
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
@@ -428,14 +560,19 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       ],
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => context.push('/booking'),
-        label: Text('Book Visit', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+        label: Text(
+          'Book Visit',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+        ),
         icon: const Icon(Icons.add_rounded),
       ),
       body: RefreshIndicator(
         onRefresh: _loadAppointments,
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
-          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+          physics: const AlwaysScrollableScrollPhysics(
+            parent: BouncingScrollPhysics(),
+          ),
           child: isWide
               ? Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -446,35 +583,74 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _GreetingRow(displayName: user.displayName.split(' ').first),
+                          _GreetingRow(
+                            displayName: user.displayName.split(' ').first,
+                          ),
                           const SizedBox(height: 14),
                           _PaymentRemindersBanner(cs),
-                          if (next != null && next.scheduledAt != null && next.scheduledAt!.difference(DateTime.now()).inHours < 24 && !next.scheduledAt!.difference(DateTime.now()).isNegative) ...[
+                          if (next != null &&
+                              next.scheduledAt != null &&
+                              next.scheduledAt!
+                                      .difference(DateTime.now())
+                                      .inHours <
+                                  24 &&
+                              !next.scheduledAt!
+                                  .difference(DateTime.now())
+                                  .isNegative) ...[
                             _UpcomingNotificationBanner(appointment: next),
                             const SizedBox(height: 14),
                           ],
                           if (!_isLoading) ...[
                             Row(
                               children: [
-                                _MiniStatCard(label: 'Total', value: _totalApts, icon: Icons.event_note_rounded, color: cs.primary),
-                                _MiniStatCard(label: 'Confirmed', value: _confirmedApts, icon: Icons.check_circle_outline_rounded, color: AppColors.statusConfirmed),
-                                _MiniStatCard(label: 'Pending', value: _pendingApts, icon: Icons.hourglass_top_rounded, color: AppColors.statusPending),
+                                _MiniStatCard(
+                                  label: 'Total',
+                                  value: _totalApts,
+                                  icon: Icons.event_note_rounded,
+                                  color: cs.primary,
+                                ),
+                                _MiniStatCard(
+                                  label: 'Confirmed',
+                                  value: _confirmedApts,
+                                  icon: Icons.check_circle_outline_rounded,
+                                  color: AppColors.statusConfirmed,
+                                ),
+                                _MiniStatCard(
+                                  label: 'Pending',
+                                  value: _pendingApts,
+                                  icon: Icons.hourglass_top_rounded,
+                                  color: AppColors.statusPending,
+                                ),
                               ],
                             ),
                             const SizedBox(height: 14),
-                            _PaymentsQuickViewCard(total: _totalAll, collected: _totalPaid, pending: _totalPending),
+                            _PaymentsQuickViewCard(
+                              total: _totalAll,
+                              collected: _totalPaid,
+                              pending: _totalPending,
+                            ),
                           ],
-                            const SizedBox(height: 18),
-                           _TodayScheduleTimeline(appointments: _todayAppointments, onRefresh: _loadAppointments),
-                            const SizedBox(height: 18),
-                            _SectionLabel(label: 'Next Appointment'),
+                          const SizedBox(height: 18),
+                          _TodayScheduleTimeline(
+                            appointments: _todayAppointments,
+                            onRefresh: _loadAppointments,
+                          ),
+                          const SizedBox(height: 18),
+                          _SectionLabel(label: 'Next Appointment'),
                           const SizedBox(height: 10),
                           if (_isLoading)
                             const _SkeletonCard()
                           else if (next == null)
-                            _EmptyNextCard(onBook: () => context.push('/booking'))
+                            _EmptyNextCard(
+                              onBook: () => context.push('/booking'),
+                            )
                           else
-                            _NextAppointmentCard(appointment: next, onTap: () => context.push('/appointment/${next.id}')),
+                            _NextAppointmentCard(
+                              appointment: next,
+                              onTap: () =>
+                                  context.push('/appointment/${next.id}'),
+                              onRetryPayment: () => _retryPayment(next),
+                            ),
                           const SizedBox(height: 20),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -488,21 +664,45 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           ),
                           const SizedBox(height: 8),
                           if (_isLoading)
-                            ...[1, 2].map((_) => const Padding(padding: EdgeInsets.only(bottom: 10), child: _SkeletonCard()))
+                            ...[1, 2].map(
+                              (_) => const Padding(
+                                padding: EdgeInsets.only(bottom: 10),
+                                child: _SkeletonCard(),
+                              ),
+                            )
                           else if (_appointments.isEmpty)
                             PremiumCard(
                               padding: const EdgeInsets.all(20),
                               child: Row(
                                 children: [
-                                  Icon(Icons.event_busy_rounded, color: cs.onSurface.withValues(alpha: 0.3), size: 32),
+                                  Icon(
+                                    Icons.event_busy_rounded,
+                                    color: cs.onSurface.withValues(alpha: 0.3),
+                                    size: 32,
+                                  ),
                                   const SizedBox(width: 14),
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
-                                        Text('No visits booked yet', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 15)),
+                                        Text(
+                                          'No visits booked yet',
+                                          style: GoogleFonts.poppins(
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 15,
+                                          ),
+                                        ),
                                         const SizedBox(height: 4),
-                                        Text('Book your first appointment above', style: GoogleFonts.poppins(fontSize: 13, color: cs.onSurface.withValues(alpha: 0.55))),
+                                        Text(
+                                          'Book your first appointment above',
+                                          style: GoogleFonts.poppins(
+                                            fontSize: 13,
+                                            color: cs.onSurface.withValues(
+                                              alpha: 0.55,
+                                            ),
+                                          ),
+                                        ),
                                       ],
                                     ),
                                   ),
@@ -510,10 +710,16 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                               ),
                             )
                           else
-                            ..._appointments.take(5).map(
+                            ..._appointments
+                                .take(5)
+                                .map(
                                   (apt) => Padding(
                                     padding: const EdgeInsets.only(bottom: 10),
-                                    child: _AppointmentTile(appointment: apt, onDeleted: _loadAppointments),
+                                    child: _AppointmentTile(
+                                      appointment: apt,
+                                      onDeleted: _loadAppointments,
+                                      onRetryPayment: () => _retryPayment(apt),
+                                    ),
                                   ),
                                 ),
                         ],
@@ -541,35 +747,68 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               : Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _GreetingRow(displayName: user.displayName.split(' ').first),
+                    _GreetingRow(
+                      displayName: user.displayName.split(' ').first,
+                    ),
                     const SizedBox(height: 14),
                     _PaymentRemindersBanner(cs),
-                    if (next != null && next.scheduledAt != null && next.scheduledAt!.difference(DateTime.now()).inHours < 24 && !next.scheduledAt!.difference(DateTime.now()).isNegative) ...[
+                    if (next != null &&
+                        next.scheduledAt != null &&
+                        next.scheduledAt!.difference(DateTime.now()).inHours <
+                            24 &&
+                        !next.scheduledAt!
+                            .difference(DateTime.now())
+                            .isNegative) ...[
                       _UpcomingNotificationBanner(appointment: next),
                       const SizedBox(height: 14),
                     ],
                     if (!_isLoading) ...[
                       Row(
                         children: [
-                          _MiniStatCard(label: 'Total', value: _totalApts, icon: Icons.event_note_rounded, color: cs.primary),
-                          _MiniStatCard(label: 'Confirmed', value: _confirmedApts, icon: Icons.check_circle_outline_rounded, color: AppColors.statusConfirmed),
-                          _MiniStatCard(label: 'Pending', value: _pendingApts, icon: Icons.hourglass_top_rounded, color: AppColors.statusPending),
+                          _MiniStatCard(
+                            label: 'Total',
+                            value: _totalApts,
+                            icon: Icons.event_note_rounded,
+                            color: cs.primary,
+                          ),
+                          _MiniStatCard(
+                            label: 'Confirmed',
+                            value: _confirmedApts,
+                            icon: Icons.check_circle_outline_rounded,
+                            color: AppColors.statusConfirmed,
+                          ),
+                          _MiniStatCard(
+                            label: 'Pending',
+                            value: _pendingApts,
+                            icon: Icons.hourglass_top_rounded,
+                            color: AppColors.statusPending,
+                          ),
                         ],
                       ),
                       const SizedBox(height: 14),
-                      _PaymentsQuickViewCard(total: _totalAll, collected: _totalPaid, pending: _totalPending),
+                      _PaymentsQuickViewCard(
+                        total: _totalAll,
+                        collected: _totalPaid,
+                        pending: _totalPending,
+                      ),
                     ],
-                     const SizedBox(height: 18),
-                     _TodayScheduleTimeline(appointments: _todayAppointments, onRefresh: _loadAppointments),
-                     const SizedBox(height: 18),
-                     _SectionLabel(label: 'Next Appointment'),
+                    const SizedBox(height: 18),
+                    _TodayScheduleTimeline(
+                      appointments: _todayAppointments,
+                      onRefresh: _loadAppointments,
+                    ),
+                    const SizedBox(height: 18),
+                    _SectionLabel(label: 'Next Appointment'),
                     const SizedBox(height: 10),
                     if (_isLoading)
                       const _SkeletonCard()
                     else if (next == null)
                       _EmptyNextCard(onBook: () => context.push('/booking'))
                     else
-                      _NextAppointmentCard(appointment: next, onTap: () => context.push('/appointment/${next.id}')),
+                      _NextAppointmentCard(
+                        appointment: next,
+                        onTap: () => context.push('/appointment/${next.id}'),
+                      ),
                     const SizedBox(height: 20),
                     _SectionLabel(label: 'Quick Actions'),
                     const SizedBox(height: 10),
@@ -587,21 +826,44 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     ),
                     const SizedBox(height: 8),
                     if (_isLoading)
-                      ...[1, 2].map((_) => const Padding(padding: EdgeInsets.only(bottom: 10), child: _SkeletonCard()))
+                      ...[1, 2].map(
+                        (_) => const Padding(
+                          padding: EdgeInsets.only(bottom: 10),
+                          child: _SkeletonCard(),
+                        ),
+                      )
                     else if (_appointments.isEmpty)
                       PremiumCard(
                         padding: const EdgeInsets.all(20),
                         child: Row(
                           children: [
-                            Icon(Icons.event_busy_rounded, color: cs.onSurface.withValues(alpha: 0.3), size: 32),
+                            Icon(
+                              Icons.event_busy_rounded,
+                              color: cs.onSurface.withValues(alpha: 0.3),
+                              size: 32,
+                            ),
                             const SizedBox(width: 14),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text('No visits booked yet', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 15)),
+                                  Text(
+                                    'No visits booked yet',
+                                    style: GoogleFonts.poppins(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 15,
+                                    ),
+                                  ),
                                   const SizedBox(height: 4),
-                                  Text('Book your first appointment above', style: GoogleFonts.poppins(fontSize: 13, color: cs.onSurface.withValues(alpha: 0.55))),
+                                  Text(
+                                    'Book your first appointment above',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 13,
+                                      color: cs.onSurface.withValues(
+                                        alpha: 0.55,
+                                      ),
+                                    ),
+                                  ),
                                 ],
                               ),
                             ),
@@ -609,10 +871,15 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         ),
                       )
                     else
-                      ..._appointments.take(5).map(
+                      ..._appointments
+                          .take(5)
+                          .map(
                             (apt) => Padding(
                               padding: const EdgeInsets.only(bottom: 10),
-                              child: _AppointmentTile(appointment: apt, onDeleted: _loadAppointments),
+                              child: _AppointmentTile(
+                                appointment: apt,
+                                onDeleted: _loadAppointments,
+                              ),
                             ),
                           ),
                     const SizedBox(height: 20),
@@ -639,7 +906,11 @@ class _SectionLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       label,
-      style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurface),
+      style: GoogleFonts.poppins(
+        fontSize: 16,
+        fontWeight: FontWeight.w700,
+        color: Theme.of(context).colorScheme.onSurface,
+      ),
     );
   }
 }
@@ -677,15 +948,34 @@ class _GreetingRow extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('$_greeting,', style: GoogleFonts.poppins(fontSize: 13, color: cs.onSurface.withValues(alpha: 0.55))),
-        Text(displayName, style: GoogleFonts.poppins(fontSize: 22, fontWeight: FontWeight.w800, color: cs.onSurface, letterSpacing: -0.5)),
+        Text(
+          '$_greeting,',
+          style: GoogleFonts.poppins(
+            fontSize: 13,
+            color: cs.onSurface.withValues(alpha: 0.55),
+          ),
+        ),
+        Text(
+          displayName,
+          style: GoogleFonts.poppins(
+            fontSize: 22,
+            fontWeight: FontWeight.w800,
+            color: cs.onSurface,
+            letterSpacing: -0.5,
+          ),
+        ),
       ],
     );
   }
 }
 
 class _MiniStatCard extends StatelessWidget {
-  const _MiniStatCard({required this.label, required this.value, required this.icon, required this.color});
+  const _MiniStatCard({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.color,
+  });
   final String label;
   final int value;
   final IconData icon;
@@ -701,8 +991,23 @@ class _MiniStatCard extends StatelessWidget {
           children: [
             Icon(icon, color: color, size: 20),
             const SizedBox(height: 6),
-            Text(value.toString(), style: GoogleFonts.poppins(fontSize: 22, fontWeight: FontWeight.w800, color: color)),
-            Text(label, style: GoogleFonts.poppins(fontSize: 11, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.55))),
+            Text(
+              value.toString(),
+              style: GoogleFonts.poppins(
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+                color: color,
+              ),
+            ),
+            Text(
+              label,
+              style: GoogleFonts.poppins(
+                fontSize: 11,
+                color: Theme.of(
+                  context,
+                ).colorScheme.onSurface.withValues(alpha: 0.55),
+              ),
+            ),
           ],
         ),
       ),
@@ -723,17 +1028,36 @@ class _EmptyNextCard extends StatelessWidget {
         children: [
           Container(
             padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: cs.primary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(14)),
-            child: Icon(Icons.event_available_rounded, color: cs.primary, size: 26),
+            decoration: BoxDecoration(
+              color: cs.primary.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Icon(
+              Icons.event_available_rounded,
+              color: cs.primary,
+              size: 26,
+            ),
           ),
           const SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('No upcoming visits', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14)),
+                Text(
+                  'No upcoming visits',
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
+                ),
                 const SizedBox(height: 3),
-                Text('Schedule your next visit now', style: GoogleFonts.poppins(fontSize: 12, color: cs.onSurface.withValues(alpha: 0.55))),
+                Text(
+                  'Schedule your next visit now',
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    color: cs.onSurface.withValues(alpha: 0.55),
+                  ),
+                ),
               ],
             ),
           ),
@@ -745,9 +1069,14 @@ class _EmptyNextCard extends StatelessWidget {
 }
 
 class _NextAppointmentCard extends StatelessWidget {
-  const _NextAppointmentCard({required this.appointment, required this.onTap});
+  const _NextAppointmentCard({
+    required this.appointment,
+    required this.onTap,
+    this.onRetryPayment,
+  });
   final Appointment appointment;
   final VoidCallback onTap;
+  final VoidCallback? onRetryPayment;
 
   @override
   Widget build(BuildContext context) {
@@ -767,19 +1096,48 @@ class _NextAppointmentCard extends StatelessWidget {
           children: [
             Container(
               padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: cs.primary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(14)),
-              child: Icon(Icons.calendar_today_rounded, color: cs.primary, size: 26),
+              decoration: BoxDecoration(
+                color: cs.primary.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Icon(
+                Icons.calendar_today_rounded,
+                color: cs.primary,
+                size: 26,
+              ),
             ),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(appointment.patientName, style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 15), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  Text(
+                    appointment.patientName,
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                   const SizedBox(height: 3),
-                  Text(date, style: GoogleFonts.poppins(fontSize: 12, color: cs.onSurface.withValues(alpha: 0.6))),
+                  Text(
+                    date,
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      color: cs.onSurface.withValues(alpha: 0.6),
+                    ),
+                  ),
                   const SizedBox(height: 3),
-                  Text(appointment.treatmentType, style: GoogleFonts.poppins(fontSize: 12, color: cs.onSurface.withValues(alpha: 0.55)), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  Text(
+                    appointment.treatmentType,
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      color: cs.onSurface.withValues(alpha: 0.55),
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ],
               ),
             ),
@@ -788,18 +1146,57 @@ class _NextAppointmentCard extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  decoration: BoxDecoration(color: sBg, borderRadius: BorderRadius.circular(20)),
-                  child: Text(appointment.status, style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600, color: sColor)),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: sBg,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    appointment.status,
+                    style: GoogleFonts.poppins(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: sColor,
+                    ),
+                  ),
                 ),
+                if (appointment.paymentMethod == 'online' &&
+                    appointment.paymentStatus == 'pending') ...[
+                  const SizedBox(height: 8),
+                  TextButton.icon(
+                    onPressed: onRetryPayment,
+                    icon: const Icon(Icons.payment_rounded, size: 14),
+                    label: const Text('Pay Now'),
+                    style: TextButton.styleFrom(
+                      backgroundColor: Colors.blueAccent.withValues(alpha: 0.1),
+                      foregroundColor: Colors.blueAccent,
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      textStyle: GoogleFonts.poppins(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
                 if (appointment.isEmergency) ...[
                   const SizedBox(height: 6),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
                     decoration: BoxDecoration(
                       color: const Color(0xFFFEE2E2),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.3)),
+                      border: Border.all(
+                        color: const Color(0xFFEF4444).withValues(alpha: 0.3),
+                      ),
                     ),
                     child: Text(
                       'EMG',
@@ -837,21 +1234,66 @@ class _QuickActionsGrid extends StatelessWidget {
       mainAxisSpacing: 8,
       childAspectRatio: 1.0,
       children: [
-        _QuickAction(icon: Icons.calendar_month_rounded, label: 'Book', color: const Color(0xFF0A6BE8), onTap: () => context.push('/booking')),
-        _QuickAction(icon: Icons.list_alt_rounded, label: 'Visits', color: const Color(0xFF6366F1), onTap: () => context.push('/appointments')),
-        _QuickAction(icon: Icons.account_balance_wallet_rounded, label: 'Pay', color: const Color(0xFF00A86B), onTap: () => context.push('/payments')),
-        _QuickAction(icon: Icons.book_rounded, label: 'Notes', color: const Color(0xFFF59E0B), onTap: () => context.push('/notes')),
-        _QuickAction(icon: Icons.calculate_rounded, label: 'Calc', color: const Color(0xFF8B5CF6), onTap: () => context.push('/calculator')),
-        _QuickAction(icon: Icons.history_rounded, label: 'History', color: const Color(0xFF10B981), onTap: () => context.push('/patient-history')),
-        _QuickAction(icon: Icons.forum_rounded, label: 'Chat', color: const Color(0xFF0E7490), onTap: () => context.push('/chat')),
-        _QuickAction(icon: Icons.manage_accounts_rounded, label: 'Staff', color: const Color(0xFF0F7490), onTap: () => context.push('/staff-management')),
+        _QuickAction(
+          icon: Icons.calendar_month_rounded,
+          label: 'Book',
+          color: const Color(0xFF0A6BE8),
+          onTap: () => context.push('/booking'),
+        ),
+        _QuickAction(
+          icon: Icons.list_alt_rounded,
+          label: 'Visits',
+          color: const Color(0xFF6366F1),
+          onTap: () => context.push('/appointments'),
+        ),
+        _QuickAction(
+          icon: Icons.account_balance_wallet_rounded,
+          label: 'Pay',
+          color: const Color(0xFF00A86B),
+          onTap: () => context.push('/payments'),
+        ),
+        _QuickAction(
+          icon: Icons.book_rounded,
+          label: 'Notes',
+          color: const Color(0xFFF59E0B),
+          onTap: () => context.push('/notes'),
+        ),
+        _QuickAction(
+          icon: Icons.calculate_rounded,
+          label: 'Calc',
+          color: const Color(0xFF8B5CF6),
+          onTap: () => context.push('/calculator'),
+        ),
+        _QuickAction(
+          icon: Icons.history_rounded,
+          label: 'History',
+          color: const Color(0xFF10B981),
+          onTap: () => context.push('/patient-history'),
+        ),
+        _QuickAction(
+          icon: Icons.forum_rounded,
+          label: 'Chat',
+          color: const Color(0xFF0E7490),
+          onTap: () => context.push('/chat'),
+        ),
+        _QuickAction(
+          icon: Icons.manage_accounts_rounded,
+          label: 'Staff',
+          color: const Color(0xFF0F7490),
+          onTap: () => context.push('/staff-management'),
+        ),
       ],
     );
   }
 }
 
 class _QuickAction extends StatelessWidget {
-  const _QuickAction({required this.icon, required this.label, required this.color, required this.onTap});
+  const _QuickAction({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
   final IconData icon;
   final String label;
   final Color color;
@@ -871,7 +1313,10 @@ class _QuickAction extends StatelessWidget {
             children: [
               Container(
                 padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(12)),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 child: Icon(icon, color: color, size: 18),
               ),
               const SizedBox(height: 4),
@@ -912,14 +1357,28 @@ class _ClinicInfoCard extends StatelessWidget {
               Icon(Icons.business_rounded, color: cs.primary, size: 20),
               const SizedBox(width: 8),
               Expanded(
-                child: Text('Gonstead Chiropractic Treatment', style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 14), overflow: TextOverflow.ellipsis),
+                child: Text(
+                  'Gonstead Chiropractic Treatment',
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ),
           const SizedBox(height: 12),
-          _InfoLine(icon: Icons.access_time_rounded, text: 'Mon – Sat  •  09:00 AM – 07:00 PM'),
+          _InfoLine(
+            icon: Icons.access_time_rounded,
+            text: 'Mon – Sat  •  09:00 AM – 07:00 PM',
+          ),
           const SizedBox(height: 6),
-          _InfoLine(icon: Icons.location_on_rounded, text: 'Tehsil Road, Near Peshawar Model School, Nowshera City, KPK.'),
+          _InfoLine(
+            icon: Icons.location_on_rounded,
+            text:
+                'Tehsil Road, Near Peshawar Model School, Nowshera City, KPK.',
+          ),
           const SizedBox(height: 16),
           Row(
             children: [
@@ -945,7 +1404,9 @@ class _ClinicInfoCard extends StatelessWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: OutlinedButton(
-                  onPressed: () => onLaunchUrl('https://maps.google.com/?q=Tehsil+Road+Nowshera'),
+                  onPressed: () => onLaunchUrl(
+                    'https://maps.google.com/?q=Tehsil+Road+Nowshera',
+                  ),
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(horizontal: 8),
                   ),
@@ -982,16 +1443,29 @@ class _InfoLine extends StatelessWidget {
       children: [
         Icon(icon, size: 16, color: cs.onSurface.withValues(alpha: 0.45)),
         const SizedBox(width: 8),
-        Expanded(child: Text(text, style: GoogleFonts.poppins(fontSize: 13, color: cs.onSurface.withValues(alpha: 0.7)))),
+        Expanded(
+          child: Text(
+            text,
+            style: GoogleFonts.poppins(
+              fontSize: 13,
+              color: cs.onSurface.withValues(alpha: 0.7),
+            ),
+          ),
+        ),
       ],
     );
   }
 }
 
 class _AppointmentTile extends StatelessWidget {
-  const _AppointmentTile({required this.appointment, this.onDeleted});
+  const _AppointmentTile({
+    required this.appointment,
+    this.onDeleted,
+    this.onRetryPayment,
+  });
   final Appointment appointment;
   final VoidCallback? onDeleted;
+  final VoidCallback? onRetryPayment;
 
   @override
   Widget build(BuildContext context) {
@@ -1010,16 +1484,28 @@ class _AppointmentTile extends StatelessWidget {
           color: AppColors.statusCancelled.withValues(alpha: 0.15),
           borderRadius: BorderRadius.circular(20),
         ),
-        child: const Icon(Icons.delete_outline_rounded, color: AppColors.statusCancelled),
+        child: const Icon(
+          Icons.delete_outline_rounded,
+          color: AppColors.statusCancelled,
+        ),
       ),
       confirmDismiss: (_) async {
         return await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
-            title: Text('Delete appointment', style: GoogleFonts.poppins(fontWeight: FontWeight.w700)),
-            content: Text('Remove ${appointment.patientName}\'s appointment?', style: GoogleFonts.poppins()),
+            title: Text(
+              'Delete appointment',
+              style: GoogleFonts.poppins(fontWeight: FontWeight.w700),
+            ),
+            content: Text(
+              'Remove ${appointment.patientName}\'s appointment?',
+              style: GoogleFonts.poppins(),
+            ),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel'),
+              ),
               TextButton(
                 onPressed: () => Navigator.pop(ctx, true),
                 child: Text('Delete', style: TextStyle(color: cs.error)),
@@ -1043,8 +1529,14 @@ class _AppointmentTile extends StatelessWidget {
                 radius: 22,
                 backgroundColor: cs.primary.withValues(alpha: 0.12),
                 child: Text(
-                  appointment.patientName.isNotEmpty ? appointment.patientName[0].toUpperCase() : '?',
-                  style: GoogleFonts.poppins(color: cs.primary, fontWeight: FontWeight.w700, fontSize: 16),
+                  appointment.patientName.isNotEmpty
+                      ? appointment.patientName[0].toUpperCase()
+                      : '?',
+                  style: GoogleFonts.poppins(
+                    color: cs.primary,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
@@ -1052,32 +1544,119 @@ class _AppointmentTile extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(appointment.patientName, style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14), overflow: TextOverflow.ellipsis, maxLines: 1),
+                    Text(
+                      appointment.patientName,
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
                     const SizedBox(height: 2),
-                    Text('${appointment.time}  •  ${appointment.treatmentType}',
-                        style: GoogleFonts.poppins(fontSize: 11.5, color: cs.onSurface.withValues(alpha: 0.55)), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    Text(
+                      '${appointment.time}  •  ${appointment.treatmentType}',
+                      style: GoogleFonts.poppins(
+                        fontSize: 11.5,
+                        color: cs.onSurface.withValues(alpha: 0.55),
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    // Payment Status Badge
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: appointment.paymentStatus == 'paid'
+                            ? Colors.green.withValues(alpha: 0.12)
+                            : Colors.orange.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: appointment.paymentStatus == 'paid'
+                              ? Colors.green.withValues(alpha: 0.2)
+                              : Colors.orange.withValues(alpha: 0.2),
+                        ),
+                      ),
+                      child: Text(
+                        appointment.paymentStatus == 'paid'
+                            ? 'PAID (Online)'
+                            : 'UNPAID (Cash)',
+                        style: GoogleFonts.poppins(
+                          fontSize: 8,
+                          fontWeight: FontWeight.w800,
+                          color: appointment.paymentStatus == 'paid'
+                              ? Colors.green
+                              : Colors.orange,
+                        ),
+                      ),
+                    ),
+                    if (appointment.paymentMethod == 'online' &&
+                        appointment.paymentStatus == 'pending') ...[
+                      const SizedBox(height: 6),
+                      SizedBox(
+                        height: 28,
+                        child: ElevatedButton.icon(
+                          onPressed: onRetryPayment,
+                          icon: const Icon(Icons.payment_rounded, size: 12),
+                          label: const Text('Pay Now'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blueAccent,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            textStyle: GoogleFonts.poppins(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
               if (appointment.isEmergency) ...[
                 const SizedBox(width: 4),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 5,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: const Color(0xFFFEE2E2),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
                     'EMG',
-                    style: GoogleFonts.poppins(fontSize: 8, fontWeight: FontWeight.w700, color: const Color(0xFFEF4444)),
+                    style: GoogleFonts.poppins(
+                      fontSize: 8,
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFFEF4444),
+                    ),
                   ),
                 ),
               ],
               const SizedBox(width: 6),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(color: sBg, borderRadius: BorderRadius.circular(20)),
-                child: Text(appointment.status, style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.w600, color: sColor)),
+                decoration: BoxDecoration(
+                  color: sBg,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  appointment.status,
+                  style: GoogleFonts.poppins(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: sColor,
+                  ),
+                ),
               ),
             ],
           ),
@@ -1111,10 +1690,13 @@ class _UpcomingNotificationBanner extends StatelessWidget {
             end: Alignment.bottomRight,
           ),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFF97316).withOpacity(0.3), width: 1.5),
+          border: Border.all(
+            color: const Color(0xFFF97316).withValues(alpha: 0.3),
+            width: 1.5,
+          ),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFFF97316).withOpacity(0.06),
+              color: const Color(0xFFF97316).withValues(alpha: 0.06),
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),
@@ -1125,7 +1707,7 @@ class _UpcomingNotificationBanner extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: const Color(0xFFF97316).withOpacity(0.12),
+                color: const Color(0xFFF97316).withValues(alpha: 0.12),
                 shape: BoxShape.circle,
               ),
               child: const Icon(
@@ -1156,7 +1738,10 @@ class _UpcomingNotificationBanner extends StatelessWidget {
                       ),
                       const SizedBox(width: 8),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
                           color: const Color(0xFFEA580C),
                           borderRadius: BorderRadius.circular(12),
@@ -1185,7 +1770,7 @@ class _UpcomingNotificationBanner extends StatelessWidget {
                     '${appointment.treatmentType}  •  Today at ${appointment.time}',
                     style: GoogleFonts.poppins(
                       fontSize: 11.5,
-                      color: const Color(0xFF431407).withOpacity(0.65),
+                      color: const Color(0xFF431407).withValues(alpha: 0.65),
                       fontWeight: FontWeight.w500,
                     ),
                     maxLines: 1,
@@ -1221,7 +1806,11 @@ class _PaymentsQuickViewCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(Icons.account_balance_wallet_rounded, color: cs.primary, size: 20),
+              Icon(
+                Icons.account_balance_wallet_rounded,
+                color: cs.primary,
+                size: 20,
+              ),
               const SizedBox(width: 8),
               Text(
                 'Payments Quick View',
@@ -1252,7 +1841,7 @@ class _PaymentsQuickViewCard extends StatelessWidget {
     return Container(
       height: 36,
       width: 1,
-      color: Colors.grey.withOpacity(0.2),
+      color: Colors.grey.withValues(alpha: 0.2),
       margin: const EdgeInsets.symmetric(horizontal: 6),
     );
   }
@@ -1268,7 +1857,7 @@ class _PaymentsQuickViewCard extends StatelessWidget {
             style: GoogleFonts.poppins(
               fontSize: 11,
               fontWeight: FontWeight.w600,
-              color: color.withOpacity(0.8),
+              color: color.withValues(alpha: 0.8),
             ),
           ),
           const SizedBox(height: 4),
@@ -1299,10 +1888,16 @@ class _TodayScheduleTimeline extends StatelessWidget {
   final List<Appointment> appointments;
   final VoidCallback onRefresh;
 
-  Future<void> _launchWhatsApp(BuildContext context, String phone, String patientName, String dateStr) async {
+  Future<void> _launchWhatsApp(
+    BuildContext context,
+    String phone,
+    String patientName,
+    String dateStr,
+  ) async {
     final cleanPhone = phone.replaceAll(RegExp(r'\s+|-|\(|\)'), '');
     final message = Uri.encodeComponent(
-        "Hello $patientName, this is a reminder for your chiropractic appointment scheduled on $dateStr at Gonstead Chiropractic Treatment. Please let us know if you need to reschedule. Thank you!");
+      "Hello $patientName, this is a reminder for your chiropractic appointment scheduled on $dateStr at Gonstead Chiropractic Treatment. Please let us know if you need to reschedule. Thank you!",
+    );
     String finalPhone = cleanPhone;
     if (!cleanPhone.startsWith('+') && !cleanPhone.startsWith('00')) {
       if (cleanPhone.startsWith('0')) {
@@ -1317,7 +1912,11 @@ class _TodayScheduleTimeline extends StatelessWidget {
         await launchUrlString(url, mode: LaunchMode.externalApplication);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not launch WhatsApp. Please check if it is installed.')),
+          const SnackBar(
+            content: Text(
+              'Could not launch WhatsApp. Please check if it is installed.',
+            ),
+          ),
         );
       }
     } catch (e) {
@@ -1352,18 +1951,34 @@ class _TodayScheduleTimeline extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: cs.primary.withOpacity(0.08),
+                color: cs.primary.withValues(alpha: 0.08),
                 shape: BoxShape.circle,
               ),
-              child: Icon(Icons.calendar_today_rounded, color: cs.primary, size: 24),
+              child: Icon(
+                Icons.calendar_today_rounded,
+                color: cs.primary,
+                size: 24,
+              ),
             ),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text("No appointments today", style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 14)),
-                  Text("Your schedule is free for the rest of today.", style: GoogleFonts.poppins(fontSize: 12, color: cs.onSurface.withOpacity(0.55))),
+                  Text(
+                    "No appointments today",
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                    ),
+                  ),
+                  Text(
+                    "Your schedule is free for the rest of today.",
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      color: cs.onSurface.withValues(alpha: 0.55),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -1391,9 +2006,12 @@ class _TodayScheduleTimeline extends StatelessWidget {
               ),
               const Spacer(),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
-                  color: cs.primary.withOpacity(0.1),
+                  color: cs.primary.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
@@ -1436,9 +2054,9 @@ class _TodayScheduleTimeline extends StatelessWidget {
                             border: Border.all(color: Colors.white, width: 2),
                             boxShadow: [
                               BoxShadow(
-                                color: sColor.withOpacity(0.4),
+                                color: sColor.withValues(alpha: 0.4),
                                 blurRadius: 6,
-                              )
+                              ),
                             ],
                           ),
                         ),
@@ -1446,7 +2064,7 @@ class _TodayScheduleTimeline extends StatelessWidget {
                           Expanded(
                             child: Container(
                               width: 2,
-                              color: cs.onSurface.withOpacity(0.1),
+                              color: cs.onSurface.withValues(alpha: 0.1),
                             ),
                           )
                         else
@@ -1459,25 +2077,31 @@ class _TodayScheduleTimeline extends StatelessWidget {
                       child: Padding(
                         padding: const EdgeInsets.only(bottom: 16.0),
                         child: InkWell(
-                          onTap: () => context.push('/appointment/${apt.id}').then((_) => onRefresh()),
+                          onTap: () => context
+                              .push('/appointment/${apt.id}')
+                              .then((_) => onRefresh()),
                           borderRadius: BorderRadius.circular(12),
                           child: Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: cs.onSurface.withOpacity(0.02),
+                              color: cs.onSurface.withValues(alpha: 0.02),
                               borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: cs.onSurface.withOpacity(0.05)),
+                              border: Border.all(
+                                color: cs.onSurface.withValues(alpha: 0.05),
+                              ),
                             ),
                             child: Row(
                               children: [
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Wrap(
                                         spacing: 8,
                                         runSpacing: 4,
-                                        crossAxisAlignment: WrapCrossAlignment.center,
+                                        crossAxisAlignment:
+                                            WrapCrossAlignment.center,
                                         children: [
                                           Text(
                                             timeStr,
@@ -1488,10 +2112,14 @@ class _TodayScheduleTimeline extends StatelessWidget {
                                             ),
                                           ),
                                           Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 6,
+                                              vertical: 2,
+                                            ),
                                             decoration: BoxDecoration(
-                                              color: sColor.withOpacity(0.12),
-                                              borderRadius: BorderRadius.circular(6),
+                                              color: sColor.withValues(alpha: 0.12),
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
                                             ),
                                             child: Text(
                                               apt.status,
@@ -1499,6 +2127,36 @@ class _TodayScheduleTimeline extends StatelessWidget {
                                                 fontSize: 9,
                                                 fontWeight: FontWeight.bold,
                                                 color: sColor,
+                                              ),
+                                            ),
+                                          ),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 6,
+                                              vertical: 2,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: apt.paymentStatus == 'paid'
+                                                  ? Colors.green.withValues(
+                                                      alpha: 0.12,
+                                                    )
+                                                  : Colors.orange.withValues(
+                                                      alpha: 0.12,
+                                                    ),
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                            ),
+                                            child: Text(
+                                              apt.paymentStatus == 'paid'
+                                                  ? 'PAID'
+                                                  : 'UNPAID',
+                                              style: GoogleFonts.poppins(
+                                                fontSize: 9,
+                                                fontWeight: FontWeight.bold,
+                                                color:
+                                                    apt.paymentStatus == 'paid'
+                                                    ? Colors.green
+                                                    : Colors.orange,
                                               ),
                                             ),
                                           ),
@@ -1518,7 +2176,7 @@ class _TodayScheduleTimeline extends StatelessWidget {
                                         apt.treatmentType,
                                         style: GoogleFonts.poppins(
                                           fontSize: 11,
-                                          color: cs.onSurface.withOpacity(0.55),
+                                          color: cs.onSurface.withValues(alpha: 0.55),
                                         ),
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
@@ -1532,35 +2190,50 @@ class _TodayScheduleTimeline extends StatelessWidget {
                                   children: [
                                     if (apt.phoneNumber.isNotEmpty) ...[
                                       IconButton(
-                                        icon: const Icon(Icons.phone_rounded, size: 16),
+                                        icon: const Icon(
+                                          Icons.phone_rounded,
+                                          size: 16,
+                                        ),
                                         color: cs.primary,
-                                        onPressed: () => _makeCall(context, apt.phoneNumber),
+                                        onPressed: () =>
+                                            _makeCall(context, apt.phoneNumber),
                                         style: IconButton.styleFrom(
                                           padding: const EdgeInsets.all(6),
                                           minimumSize: Size.zero,
-                                          backgroundColor: cs.primary.withOpacity(0.08),
+                                          backgroundColor: cs.primary
+                                              .withValues(alpha: 0.08),
                                         ),
                                       ),
                                       const SizedBox(width: 6),
                                       IconButton(
-                                        icon: const Icon(Icons.chat_bubble_rounded, size: 16),
+                                        icon: const Icon(
+                                          Icons.chat_bubble_rounded,
+                                          size: 16,
+                                        ),
                                         color: AppColors.statusConfirmed,
                                         onPressed: () => _launchWhatsApp(
                                           context,
                                           apt.phoneNumber,
                                           apt.patientName,
                                           apt.scheduledAt != null
-                                              ? DateFormat('EEE d MMM hh:mm a').format(apt.scheduledAt!)
+                                              ? DateFormat(
+                                                  'EEE d MMM hh:mm a',
+                                                ).format(apt.scheduledAt!)
                                               : apt.time,
                                         ),
                                         style: IconButton.styleFrom(
                                           padding: const EdgeInsets.all(6),
                                           minimumSize: Size.zero,
-                                          backgroundColor: AppColors.statusConfirmed.withOpacity(0.08),
+                                          backgroundColor: AppColors
+                                              .statusConfirmed
+                                              .withValues(alpha: 0.08),
                                         ),
                                       ),
                                     ],
-                                    Icon(Icons.chevron_right_rounded, color: cs.onSurface.withOpacity(0.2)),
+                                    Icon(
+                                      Icons.chevron_right_rounded,
+                                      color: cs.onSurface.withValues(alpha: 0.2),
+                                    ),
                                   ],
                                 ),
                               ],
