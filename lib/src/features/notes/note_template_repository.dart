@@ -43,22 +43,24 @@ class NoteTemplate {
       soapObjective: json['soapObjective']?.toString() ?? '',
       soapAssessment: json['soapAssessment']?.toString() ?? '',
       soapPlan: json['soapPlan']?.toString() ?? '',
-      createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? '') ?? DateTime.now(),
+      createdAt:
+          DateTime.tryParse(json['createdAt']?.toString() ?? '') ??
+          DateTime.now(),
     );
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'category': category,
-        'body': body,
-        'isSoap': isSoap,
-        'soapSubjective': soapSubjective,
-        'soapObjective': soapObjective,
-        'soapAssessment': soapAssessment,
-        'soapPlan': soapPlan,
-        'createdAt': createdAt.toIso8601String(),
-      };
+    'id': id,
+    'name': name,
+    'category': category,
+    'body': body,
+    'isSoap': isSoap,
+    'soapSubjective': soapSubjective,
+    'soapObjective': soapObjective,
+    'soapAssessment': soapAssessment,
+    'soapPlan': soapPlan,
+    'createdAt': createdAt.toIso8601String(),
+  };
 
   NoteTemplate copyWith({
     String? id,
@@ -113,7 +115,8 @@ final List<NoteTemplate> kBuiltInTemplates = [
     soapSubjective: 'Patient reports mild lower back stiffness. No acute pain.',
     soapObjective: 'Restricted motion at L4-L5. Tenderness on palpation.',
     soapAssessment: 'Subluxation complex at lumbar spine.',
-    soapPlan: 'Gonstead adjustment applied at L4-L5. Ice pack recommended. Reassess in 1 week.',
+    soapPlan:
+        'Gonstead adjustment applied at L4-L5. Ice pack recommended. Reassess in 1 week.',
     createdAt: DateTime(2024),
   ),
   NoteTemplate(
@@ -125,7 +128,8 @@ final List<NoteTemplate> kBuiltInTemplates = [
     soapSubjective: 'Patient complains of neck stiffness and headache.',
     soapObjective: 'Restricted cervical ROM. Tenderness at C3-C5.',
     soapAssessment: 'Cervical subluxation with secondary headache.',
-    soapPlan: 'Cervical adjustment at C3-C5. Heat therapy. Stretching exercises provided.',
+    soapPlan:
+        'Cervical adjustment at C3-C5. Heat therapy. Stretching exercises provided.',
     createdAt: DateTime(2024),
   ),
   NoteTemplate(
@@ -134,17 +138,22 @@ final List<NoteTemplate> kBuiltInTemplates = [
     category: 'General',
     body: '',
     isSoap: true,
-    soapSubjective: 'New patient presenting with chief complaint of [describe complaint]. Onset [duration] ago.',
-    soapObjective: 'Full postural assessment performed. Spinal palpation reveals [findings].',
-    soapAssessment: 'Initial subluxation pattern identified. X-rays [ordered/reviewed].',
-    soapPlan: 'Initiate care plan. Follow up in 3 days. Patient education on spinal hygiene.',
+    soapSubjective:
+        'New patient presenting with chief complaint of [describe complaint]. Onset [duration] ago.',
+    soapObjective:
+        'Full postural assessment performed. Spinal palpation reveals [findings].',
+    soapAssessment:
+        'Initial subluxation pattern identified. X-rays [ordered/reviewed].',
+    soapPlan:
+        'Initiate care plan. Follow up in 3 days. Patient education on spinal hygiene.',
     createdAt: DateTime(2024),
   ),
   NoteTemplate(
     id: '__builtin_posture_correction',
     name: 'Posture Correction',
     category: 'Posture',
-    body: 'Postural assessment completed. Forward head posture noted (+2.5 cm anterior displacement). '
+    body:
+        'Postural assessment completed. Forward head posture noted (+2.5 cm anterior displacement). '
         'Corrective exercises prescribed: chin tucks x15 reps, wall angels x10. '
         'Ergonomic advice given for workstation setup. Review in 2 weeks.',
     isSoap: false,
@@ -156,17 +165,20 @@ final List<NoteTemplate> kBuiltInTemplates = [
     category: 'Recovery',
     body: '',
     isSoap: true,
-    soapSubjective: 'Patient reports [improvement/no change/worsening] since last visit. Pain level [0-10].',
+    soapSubjective:
+        'Patient reports [improvement/no change/worsening] since last visit. Pain level [0-10].',
     soapObjective: 'ROM [improved/unchanged]. Reduced tenderness at [region].',
     soapAssessment: 'Responding [well/partially] to treatment plan.',
-    soapPlan: 'Continue current protocol. [Adjust care plan if needed]. Next visit: [date].',
+    soapPlan:
+        'Continue current protocol. [Adjust care plan if needed]. Next visit: [date].',
     createdAt: DateTime(2024),
   ),
   NoteTemplate(
     id: '__builtin_discharge',
     name: 'Discharge Summary',
     category: 'General',
-    body: 'Patient has completed the care plan and achieved treatment goals. '
+    body:
+        'Patient has completed the care plan and achieved treatment goals. '
         'Significant improvement in ROM and pain levels (VAS from [x] to [y]). '
         'Maintenance care recommended every [4-6 weeks]. '
         'Home exercise program provided. Patient discharged in good condition.',
@@ -197,7 +209,9 @@ class NoteTemplateRepository {
     try {
       final decoded = jsonDecode(raw) as List<dynamic>;
       _cache = decoded
-          .map((e) => NoteTemplate.fromJson(Map<String, dynamic>.from(e as Map)))
+          .map(
+            (e) => NoteTemplate.fromJson(Map<String, dynamic>.from(e as Map)),
+          )
           .toList();
     } catch (e) {
       debugPrint('Error loading templates: $e');
@@ -224,7 +238,9 @@ class NoteTemplateRepository {
   Future<void> updateTemplate(NoteTemplate template) async {
     _cache = null;
     final existing = await loadTemplates();
-    final updated = existing.map((t) => t.id == template.id ? template : t).toList();
+    final updated = existing
+        .map((t) => t.id == template.id ? template : t)
+        .toList();
     await _persist(updated);
   }
 

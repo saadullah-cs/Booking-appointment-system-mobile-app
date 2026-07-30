@@ -35,10 +35,7 @@ class PremiumCard extends StatelessWidget {
         ],
       ),
       padding: padding,
-      child: Material(
-        color: Colors.transparent,
-        child: child,
-      ),
+      child: Material(color: Colors.transparent, child: child),
     );
   }
 }

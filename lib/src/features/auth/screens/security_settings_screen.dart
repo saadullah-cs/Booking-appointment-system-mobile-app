@@ -2,11 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:local_auth/local_auth.dart';
 import '../../../services/app_preferences.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../shared/widgets/app_shell_scaffold.dart';
 import '../../shared/widgets/premium_card.dart';
-import '../../../theme/app_theme.dart';
 
 class SecuritySettingsScreen extends StatefulWidget {
   const SecuritySettingsScreen({super.key});
@@ -40,9 +38,15 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
   Future<void> _togglePinLock(bool value) async {
     if (value) {
       // Prompt to create new PIN
-      final newPin = await _showPinDialog(title: 'Create 4-Digit PIN', description: 'Set a PIN to lock the clinic application.');
+      final newPin = await _showPinDialog(
+        title: 'Create 4-Digit PIN',
+        description: 'Set a PIN to lock the clinic application.',
+      );
       if (newPin == null) return;
-      final confirmPin = await _showPinDialog(title: 'Confirm 4-Digit PIN', description: 'Re-enter your new PIN to confirm.');
+      final confirmPin = await _showPinDialog(
+        title: 'Confirm 4-Digit PIN',
+        description: 'Re-enter your new PIN to confirm.',
+      );
       if (confirmPin == null) return;
 
       if (newPin != confirmPin) {
@@ -60,7 +64,10 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
       _showSnackBar('PIN Lock enabled successfully! 🔒');
     } else {
       // Prompt for current PIN to disable
-      final enteredPin = await _showPinDialog(title: 'Enter PIN to Disable', description: 'Confirm your current PIN code to turn off security lock.');
+      final enteredPin = await _showPinDialog(
+        title: 'Enter PIN to Disable',
+        description: 'Confirm your current PIN code to turn off security lock.',
+      );
       if (enteredPin == null) return;
 
       if (enteredPin != _storedPin) {
@@ -89,16 +96,24 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
 
     // Verify device supports biometrics and has enrolled biometrics before enabling.
     final localAuth = LocalAuthentication();
-    final canCheck = await localAuth.canCheckBiometrics || await localAuth.isDeviceSupported();
+    final canCheck =
+        await localAuth.canCheckBiometrics ||
+        await localAuth.isDeviceSupported();
     if (value && !canCheck) {
-      _showSnackBar('This device does not support biometric authentication.', isError: true);
+      _showSnackBar(
+        'This device does not support biometric authentication.',
+        isError: true,
+      );
       return;
     }
 
     if (value) {
       final available = await localAuth.getAvailableBiometrics();
       if (available.isEmpty) {
-        _showSnackBar('No biometrics are enrolled on this device. Please enroll a fingerprint or face.', isError: true);
+        _showSnackBar(
+          'No biometrics are enrolled on this device. Please enroll a fingerprint or face.',
+          isError: true,
+        );
         return;
       }
     }
@@ -108,11 +123,18 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
     setState(() {
       _biometricEnabled = value;
     });
-    _showSnackBar(value ? 'Biometric verification enabled. 🧬' : 'Biometric verification disabled.');
+    _showSnackBar(
+      value
+          ? 'Biometric verification enabled. 🧬'
+          : 'Biometric verification disabled.',
+    );
   }
 
   Future<void> _changePin() async {
-    final oldPin = await _showPinDialog(title: 'Enter Current PIN', description: 'Verify your current security code.');
+    final oldPin = await _showPinDialog(
+      title: 'Enter Current PIN',
+      description: 'Verify your current security code.',
+    );
     if (oldPin == null) return;
 
     if (oldPin != _storedPin) {
@@ -120,10 +142,16 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
       return;
     }
 
-    final newPin = await _showPinDialog(title: 'Enter New PIN', description: 'Type your new 4-digit code.');
+    final newPin = await _showPinDialog(
+      title: 'Enter New PIN',
+      description: 'Type your new 4-digit code.',
+    );
     if (newPin == null) return;
 
-    final confirmPin = await _showPinDialog(title: 'Confirm New PIN', description: 'Re-enter your new PIN to save.');
+    final confirmPin = await _showPinDialog(
+      title: 'Confirm New PIN',
+      description: 'Re-enter your new PIN to save.',
+    );
     if (confirmPin == null) return;
 
     if (newPin != confirmPin) {
@@ -144,14 +172,20 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
     final primaryColor = Theme.of(context).colorScheme.primary;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(msg, style: GoogleFonts.poppins(fontWeight: FontWeight.w500)),
+        content: Text(
+          msg,
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w500),
+        ),
         backgroundColor: isError ? Colors.redAccent : primaryColor,
         behavior: SnackBarBehavior.floating,
       ),
     );
   }
 
-  Future<String?> _showPinDialog({required String title, required String description}) async {
+  Future<String?> _showPinDialog({
+    required String title,
+    required String description,
+  }) async {
     String input = '';
     return showDialog<String>(
       context: context,
@@ -169,12 +203,19 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
                   children: [
                     Text(
                       title,
-                      style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w800, color: cs.onSurface),
+                      style: GoogleFonts.poppins(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: cs.onSurface,
+                      ),
                     ),
                     const SizedBox(height: 6),
                     Text(
                       description,
-                      style: GoogleFonts.poppins(fontSize: 12, color: cs.onSurface.withOpacity(0.65)),
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        color: cs.onSurface.withValues(alpha: 0.65),
+                      ),
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 24),
@@ -201,26 +242,38 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
                       child: GridView.builder(
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 3,
-                          crossAxisSpacing: 16,
-                          mainAxisSpacing: 16,
-                          childAspectRatio: 1,
-                        ),
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 3,
+                              crossAxisSpacing: 16,
+                              mainAxisSpacing: 16,
+                              childAspectRatio: 1,
+                            ),
                         itemCount: 12,
                         itemBuilder: (context, i) {
                           if (i == 9) {
                             return IconButton(
-                              icon: const Icon(Icons.cancel_outlined, color: Colors.grey),
+                              icon: const Icon(
+                                Icons.cancel_outlined,
+                                color: Colors.grey,
+                              ),
                               onPressed: () => Navigator.pop(context),
                             );
                           }
                           if (i == 11) {
                             return IconButton(
-                              icon: const Icon(Icons.backspace_outlined, color: Colors.grey),
+                              icon: const Icon(
+                                Icons.backspace_outlined,
+                                color: Colors.grey,
+                              ),
                               onPressed: () {
                                 if (input.isNotEmpty) {
-                                  setDialogState(() => input = input.substring(0, input.length - 1));
+                                  setDialogState(
+                                    () => input = input.substring(
+                                      0,
+                                      input.length - 1,
+                                    ),
+                                  );
                                 }
                               },
                             );
@@ -231,21 +284,30 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
                               if (input.length < 4) {
                                 setDialogState(() => input += digit);
                                 if (input.length == 4) {
-                                  Future.delayed(const Duration(milliseconds: 150), () {
-                                    if (context.mounted) Navigator.pop(context, input);
-                                  });
+                                  Future.delayed(
+                                    const Duration(milliseconds: 150),
+                                    () {
+                                      if (context.mounted) {
+                                        Navigator.pop(context, input);
+                                      }
+                                    },
+                                  );
                                 }
                               }
                             },
                             child: Container(
                               decoration: BoxDecoration(
-                                color: cs.primary.withOpacity(0.06),
+                                color: cs.primary.withValues(alpha: 0.06),
                                 shape: BoxShape.circle,
                               ),
                               alignment: Alignment.center,
                               child: Text(
                                 digit,
-                                style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold, color: cs.onSurface),
+                                style: GoogleFonts.poppins(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: cs.onSurface,
+                                ),
                               ),
                             ),
                           );
@@ -281,10 +343,14 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: cs.primary.withOpacity(0.1),
+                          color: cs.primary.withValues(alpha: 0.1),
                           shape: BoxShape.circle,
                         ),
-                        child: Icon(Icons.security_rounded, color: cs.primary, size: 26),
+                        child: Icon(
+                          Icons.security_rounded,
+                          color: cs.primary,
+                          size: 26,
+                        ),
                       ),
                       const SizedBox(width: 14),
                       Expanded(
@@ -293,11 +359,18 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
                           children: [
                             Text(
                               'App Security Locks',
-                              style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w700, color: cs.onSurface),
+                              style: GoogleFonts.poppins(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: cs.onSurface,
+                              ),
                             ),
                             Text(
                               'Restrict access to patients, scheduling, and billing records.',
-                              style: GoogleFonts.poppins(fontSize: 11.5, color: cs.onSurface.withOpacity(0.6)),
+                              style: GoogleFonts.poppins(
+                                fontSize: 11.5,
+                                color: cs.onSurface.withValues(alpha: 0.6),
+                              ),
                             ),
                           ],
                         ),
@@ -308,7 +381,12 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
                 const SizedBox(height: 20),
                 Text(
                   'SECURITY OPTIONS',
-                  style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w700, color: cs.primary, letterSpacing: 0.5),
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: cs.primary,
+                    letterSpacing: 0.5,
+                  ),
                 ),
                 const SizedBox(height: 10),
                 PremiumCard(
@@ -318,27 +396,57 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
                       SwitchListTile.adaptive(
                         value: _pinEnabled,
                         onChanged: _togglePinLock,
-                        title: Text('PIN Lock Protection', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14)),
-                        subtitle: Text('Require a 4-digit code to open the application', style: GoogleFonts.poppins(fontSize: 12)),
+                        title: Text(
+                          'PIN Lock Protection',
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                          ),
+                        ),
+                        subtitle: Text(
+                          'Require a 4-digit code to open the application',
+                          style: GoogleFonts.poppins(fontSize: 12),
+                        ),
                         secondary: Container(
                           padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(color: cs.primary.withOpacity(0.08), borderRadius: BorderRadius.circular(10)),
-                          child: Icon(Icons.pin_rounded, color: cs.primary, size: 20),
+                          decoration: BoxDecoration(
+                            color: cs.primary.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(
+                            Icons.pin_rounded,
+                            color: cs.primary,
+                            size: 20,
+                          ),
                         ),
                       ),
                       const Divider(height: 1, indent: 16, endIndent: 16),
                       SwitchListTile.adaptive(
                         value: _biometricEnabled,
                         onChanged: _pinEnabled ? _toggleBiometrics : null,
-                        title: Text('Biometric Fingerprint', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14)),
-                        subtitle: Text('Verify your identity using fingerprint scanner', style: GoogleFonts.poppins(fontSize: 12)),
+                        title: Text(
+                          'Biometric Fingerprint',
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                          ),
+                        ),
+                        subtitle: Text(
+                          'Verify your identity using fingerprint scanner',
+                          style: GoogleFonts.poppins(fontSize: 12),
+                        ),
                         secondary: Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: (_pinEnabled ? cs.primary : Colors.grey).withOpacity(0.08),
+                            color: (_pinEnabled ? cs.primary : Colors.grey)
+                                .withValues(alpha: 0.08),
                             borderRadius: BorderRadius.circular(10),
                           ),
-                          child: Icon(Icons.fingerprint_rounded, color: _pinEnabled ? cs.primary : Colors.grey, size: 20),
+                          child: Icon(
+                            Icons.fingerprint_rounded,
+                            color: _pinEnabled ? cs.primary : Colors.grey,
+                            size: 20,
+                          ),
                         ),
                       ),
                     ],
@@ -348,7 +456,12 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
                   const SizedBox(height: 20),
                   Text(
                     'CREDENTIAL MANAGEMENT',
-                    style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w700, color: cs.primary, letterSpacing: 0.5),
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: cs.primary,
+                      letterSpacing: 0.5,
+                    ),
                   ),
                   const SizedBox(height: 10),
                   PremiumCard(
@@ -356,11 +469,27 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
                     child: ListTile(
                       leading: Container(
                         padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(color: cs.primary.withOpacity(0.08), borderRadius: BorderRadius.circular(10)),
-                        child: Icon(Icons.lock_reset_rounded, color: cs.primary, size: 20),
+                        decoration: BoxDecoration(
+                          color: cs.primary.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(
+                          Icons.lock_reset_rounded,
+                          color: cs.primary,
+                          size: 20,
+                        ),
                       ),
-                      title: Text('Change Security PIN', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14)),
-                      subtitle: Text('Update your active 4-digit code', style: GoogleFonts.poppins(fontSize: 12)),
+                      title: Text(
+                        'Change Security PIN',
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                      ),
+                      subtitle: Text(
+                        'Update your active 4-digit code',
+                        style: GoogleFonts.poppins(fontSize: 12),
+                      ),
                       trailing: const Icon(Icons.chevron_right_rounded),
                       onTap: _changePin,
                     ),

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../features/shared/widgets/app_shell_scaffold.dart';
 import '../../features/shared/widgets/premium_card.dart';
@@ -14,6 +15,9 @@ import 'appointment_repository.dart';
 import '../../theme/app_theme.dart';
 import '../../services/repository_providers.dart';
 import '../../services/notification_service.dart';
+import '../utils/image_service.dart';
+
+enum PaymentMode { online, cash }
 
 class BookingScreen extends ConsumerStatefulWidget {
   const BookingScreen({super.key, this.initialData});
@@ -23,7 +27,8 @@ class BookingScreen extends ConsumerStatefulWidget {
   ConsumerState<BookingScreen> createState() => _BookingScreenState();
 }
 
-class _BookingScreenState extends ConsumerState<BookingScreen> with SingleTickerProviderStateMixin {
+class _BookingScreenState extends ConsumerState<BookingScreen>
+    with SingleTickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
@@ -34,8 +39,9 @@ class _BookingScreenState extends ConsumerState<BookingScreen> with SingleTicker
   final _sessionNumberController = TextEditingController(text: '1');
   final _totalSessionsController = TextEditingController();
   final _durationController = TextEditingController(text: '40');
-  
-  AppointmentRepository get _repository => ref.read(appointmentRepositoryProvider);
+
+  AppointmentRepository get _repository =>
+      ref.read(appointmentRepositoryProvider);
 
   int _step = 0; // 0=info, 1=schedule, 2=confirm
   String _service = 'Gonstead Adjustment';
@@ -48,6 +54,19 @@ class _BookingScreenState extends ConsumerState<BookingScreen> with SingleTicker
   int? _sessionNumber;
   int _durationMinutes = 40;
 
+  // Payment Mode
+  PaymentMode _paymentMode = PaymentMode.cash;
+
+  static const Map<String, double> _servicePrices = {
+    'Gonstead Adjustment': 5000.0,
+    'Spinal Screening': 3000.0,
+    'Posture Assessment': 2500.0,
+    'Full Consultation': 8000.0,
+    'Follow-up Visit': 4000.0,
+  };
+
+  double get _currentPrice => _servicePrices[_service] ?? 0.0;
+
   // New fields
   DateTime? _selectedDob;
   String? _posturalPhotoPath;
@@ -57,11 +76,26 @@ class _BookingScreenState extends ConsumerState<BookingScreen> with SingleTicker
 
   // Time slots 9am–7pm every 30 min (customizable/overrideable on conflicts)
   static final List<String> _slots = [
-    '09:00 AM', '09:30 AM', '10:00 AM', '10:30 AM',
-    '11:00 AM', '11:30 AM', '12:00 PM', '12:30 PM',
-    '01:00 PM', '01:30 PM', '02:00 PM', '02:30 PM',
-    '03:00 PM', '03:30 PM', '04:00 PM', '04:30 PM',
-    '05:00 PM', '05:30 PM', '06:00 PM', '06:30 PM',
+    '09:00 AM',
+    '09:30 AM',
+    '10:00 AM',
+    '10:30 AM',
+    '11:00 AM',
+    '11:30 AM',
+    '12:00 PM',
+    '12:30 PM',
+    '01:00 PM',
+    '01:30 PM',
+    '02:00 PM',
+    '02:30 PM',
+    '03:00 PM',
+    '03:30 PM',
+    '04:00 PM',
+    '04:30 PM',
+    '05:00 PM',
+    '05:30 PM',
+    '06:00 PM',
+    '06:30 PM',
   ];
 
   static const List<String> _services = [
@@ -73,8 +107,11 @@ class _BookingScreenState extends ConsumerState<BookingScreen> with SingleTicker
   ];
 
   static const List<Color> _serviceColors = [
-    Color(0xFF0A6BE8), Color(0xFF6366F1), Color(0xFF00A86B),
-    Color(0xFFF59E0B), Color(0xFF8B5CF6),
+    Color(0xFF0A6BE8),
+    Color(0xFF6366F1),
+    Color(0xFF00A86B),
+    Color(0xFFF59E0B),
+    Color(0xFF8B5CF6),
   ];
 
   static const List<IconData> _serviceIcons = [
@@ -94,17 +131,26 @@ class _BookingScreenState extends ConsumerState<BookingScreen> with SingleTicker
   @override
   void initState() {
     super.initState();
-    _animController = AnimationController(vsync: this, duration: const Duration(milliseconds: 500));
+    _animController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    );
     _fadeAnim = CurvedAnimation(parent: _animController, curve: Curves.easeOut);
     _animController.forward();
 
     if (widget.initialData != null) {
-      _nameController.text = widget.initialData!['patientName']?.toString() ?? '';
-      _phoneController.text = widget.initialData!['phoneNumber']?.toString() ?? '';
+      _nameController.text =
+          widget.initialData!['patientName']?.toString() ?? '';
+      _phoneController.text =
+          widget.initialData!['phoneNumber']?.toString() ?? '';
       _emailController.text = widget.initialData!['email']?.toString() ?? '';
-      _professionController.text = widget.initialData!['patientProfession']?.toString() ?? '';
-      _service = widget.initialData!['treatmentType']?.toString() ?? 'Gonstead Adjustment';
-      _treatmentPlanTotalSessions = widget.initialData!['treatmentPlanTotalSessions'] as int?;
+      _professionController.text =
+          widget.initialData!['patientProfession']?.toString() ?? '';
+      _service =
+          widget.initialData!['treatmentType']?.toString() ??
+          'Gonstead Adjustment';
+      _treatmentPlanTotalSessions =
+          widget.initialData!['treatmentPlanTotalSessions'] as int?;
       if (_treatmentPlanTotalSessions != null) {
         _totalSessionsController.text = _treatmentPlanTotalSessions!.toString();
       }
@@ -112,7 +158,9 @@ class _BookingScreenState extends ConsumerState<BookingScreen> with SingleTicker
       if (_sessionNumber != null) {
         _sessionNumberController.text = _sessionNumber!.toString();
       }
-      _reasonController.text = widget.initialData!['visitReason']?.toString() ?? 'Next follow-up treatment session.';
+      _reasonController.text =
+          widget.initialData!['visitReason']?.toString() ??
+          'Next follow-up treatment session.';
       if (widget.initialData!['durationMinutes'] != null) {
         _durationMinutes = widget.initialData!['durationMinutes'] as int;
         _durationController.text = _durationMinutes.toString();
@@ -132,6 +180,10 @@ class _BookingScreenState extends ConsumerState<BookingScreen> with SingleTicker
     _totalSessionsController.dispose();
     _durationController.dispose();
     _animController.dispose();
+    _emailController.dispose();
+    _nameController.dispose();
+    _phoneController.dispose();
+    _professionController.dispose();
     super.dispose();
   }
 
@@ -162,22 +214,32 @@ class _BookingScreenState extends ConsumerState<BookingScreen> with SingleTicker
       if (slotParts[1] == 'AM' && hour == 12) hour = 0;
 
       final scheduledDateTime = DateTime(
-        _selectedDate!.year, _selectedDate!.month, _selectedDate!.day,
-        hour, minute,
+        _selectedDate!.year,
+        _selectedDate!.month,
+        _selectedDate!.day,
+        hour,
+        minute,
       );
       final formattedDate = DateFormat('EEE, d MMM').format(_selectedDate!);
 
       final appointments = await _repository.loadAppointments();
 
       // Check conflict: Active appointments that are NOT cancelled AND NOT rejected
-      final activeAppointments = appointments.where((a) =>
-          a.status.toLowerCase() != 'cancelled' &&
-          a.status.toLowerCase() != 'rejected' &&
-          a.scheduledAt != null).toList();
+      final activeAppointments = appointments
+          .where(
+            (a) =>
+                a.status.toLowerCase() != 'cancelled' &&
+                a.status.toLowerCase() != 'rejected' &&
+                a.scheduledAt != null,
+          )
+          .toList();
 
       Appointment? conflict;
       for (final appt in activeAppointments) {
-        final diff = scheduledDateTime.difference(appt.scheduledAt!).inMinutes.abs();
+        final diff = scheduledDateTime
+            .difference(appt.scheduledAt!)
+            .inMinutes
+            .abs();
         final requiredGap = _durationMinutes;
         if (diff < requiredGap) {
           conflict = appt;
@@ -192,17 +254,24 @@ class _BookingScreenState extends ConsumerState<BookingScreen> with SingleTicker
         while (hasConflict) {
           hasConflict = false;
           for (final appt in activeAppointments) {
-            final diff = nextAvailable.difference(appt.scheduledAt!).inMinutes.abs();
+            final diff = nextAvailable
+                .difference(appt.scheduledAt!)
+                .inMinutes
+                .abs();
             final requiredGap = _durationMinutes;
             if (diff < requiredGap) {
-              nextAvailable = appt.scheduledAt!.add(Duration(minutes: requiredGap));
+              nextAvailable = appt.scheduledAt!.add(
+                Duration(minutes: requiredGap),
+              );
               hasConflict = true;
               break;
             }
           }
         }
 
-        final suggestedDateText = DateFormat('EEEE, d MMMM y').format(nextAvailable);
+        final suggestedDateText = DateFormat(
+          'EEEE, d MMMM y',
+        ).format(nextAvailable);
         final suggestedTimeText = DateFormat('hh:mm a').format(nextAvailable);
 
         if (mounted) {
@@ -211,17 +280,26 @@ class _BookingScreenState extends ConsumerState<BookingScreen> with SingleTicker
             builder: (context) => AlertDialog(
               title: Row(
                 children: [
-                  const Icon(Icons.warning_amber_rounded, color: Colors.orangeAccent),
+                  const Icon(
+                    Icons.warning_amber_rounded,
+                    color: Colors.orangeAccent,
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: Text('Booking Conflict', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 18)),
+                    child: Text(
+                      'Booking Conflict',
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 18,
+                      ),
+                    ),
                   ),
                 ],
               ),
               content: Text(
                 'This time slot conflicts with an existing appointment (enforcing $_durationMinutes-minute gap):\n\n'
                 '• Patient: ${conflict!.patientName}\n'
-                '• Booked Time: ${DateFormat('hh:mm a').format(conflict!.scheduledAt!)}\n\n'
+                '• Booked Time: ${DateFormat('hh:mm a').format(conflict.scheduledAt!)}\n\n'
                 'The next available conflict-free slot is:\n'
                 '• $suggestedDateText at $suggestedTimeText\n\n'
                 'Would you like to book this suggested slot instead?',
@@ -277,10 +355,71 @@ class _BookingScreenState extends ConsumerState<BookingScreen> with SingleTicker
         durationMinutes: _durationMinutes,
         dateOfBirth: _selectedDob,
         posturalPhotoPath: _posturalPhotoPath ?? '',
+        paymentMethod: _paymentMode.name,
+        paymentStatus: 'pending', // Save as pending FIRST for gateway security
+        amount: _currentPrice,
       );
 
-      await _repository.saveAppointment(newAppt);
- 
+      // Save initial record to Firestore with 'pending' status
+      final bool wasSynced = await _repository.saveAppointment(newAppt);
+
+      if (!wasSynced) {
+        // Display toast for offline booking
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Saved offline as unstable internet, will be booked once connected.',
+              ),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        // Notify service to watch for restoration
+        NotificationService().setOfflineBookingPending(true);
+      }
+
+      if (_paymentMode == PaymentMode.online) {
+        // Initialize Online Payment via Service
+        final payService = ref.read(paymentGatewayServiceProvider);
+        try {
+          final res = await payService.initializeSafepayTransaction(
+            amount: _currentPrice,
+            currency: 'PKR',
+            customerEmail: _emailController.text.trim(),
+          );
+
+          if (payService.safepayKey.isEmpty ||
+              payService.safepayKey.contains('your_safepay_api_key')) {
+            if (mounted) {
+              await showDialog(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  title: const Text('Payment Gateway - Test Mode'),
+                  content: const Text(
+                    'The online payment gateway is currently in Test Mode (Key unconfigured in .env). '
+                    'In production, this would launch the secure Safepay/PayFast checkout screen.',
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('Continue with Simulation'),
+                    ),
+                  ],
+                ),
+              );
+            }
+          } else {
+            final url = Uri.parse(res['checkoutUrl'] ?? '');
+            if (await canLaunchUrl(url)) {
+              await launchUrl(url, mode: LaunchMode.externalApplication);
+            }
+          }
+        } catch (e) {
+          debugPrint('Online Payment Simulation failed: $e');
+        }
+      }
+
       // Trigger instant booking notification
       try {
         await NotificationService().showLocalNotification(
@@ -288,7 +427,7 @@ class _BookingScreenState extends ConsumerState<BookingScreen> with SingleTicker
           'Patient: ${_nameController.text.trim()} • $_selectedSlot on $formattedDate',
           payload: '/appointment/$formattedId',
         );
- 
+
         // Schedule dynamic alarm/notification reminders
         await NotificationService().scheduleAppointmentReminders(newAppt);
       } catch (e) {
@@ -332,8 +471,8 @@ class _BookingScreenState extends ConsumerState<BookingScreen> with SingleTicker
                   child: _step == 0
                       ? _buildStep0(cs)
                       : _step == 1
-                          ? _buildStep1(cs)
-                          : _buildStep2(cs),
+                      ? _buildStep1(cs)
+                      : _buildStep2(cs),
                 ),
               ),
             ),
@@ -357,17 +496,36 @@ class _BookingScreenState extends ConsumerState<BookingScreen> with SingleTicker
               children: [
                 Container(
                   padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(color: cs.primary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(14)),
-                  child: Icon(Icons.event_available_rounded, color: cs.primary, size: 26),
+                  decoration: BoxDecoration(
+                    color: cs.primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(
+                    Icons.event_available_rounded,
+                    color: cs.primary,
+                    size: 26,
+                  ),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Book Your Visit', style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 15)),
+                      Text(
+                        'Book Your Visit',
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15,
+                        ),
+                      ),
                       const SizedBox(height: 2),
-                      Text('Select a treatment and enter details below.', style: GoogleFonts.poppins(fontSize: 12, color: cs.onSurface.withValues(alpha: 0.55))),
+                      Text(
+                        'Select a treatment and enter details below.',
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          color: cs.onSurface.withValues(alpha: 0.55),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -377,18 +535,33 @@ class _BookingScreenState extends ConsumerState<BookingScreen> with SingleTicker
           const SizedBox(height: 18),
 
           // Service selector
-          Text('Select Treatment', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14)),
+          Text(
+            'Select Treatment',
+            style: GoogleFonts.poppins(
+              fontWeight: FontWeight.w600,
+              fontSize: 14,
+            ),
+          ),
           const SizedBox(height: 10),
-          ...List.generate(_services.length, (i) => _ServiceTile(
-            service: _services[i],
-            icon: _serviceIcons[i],
-            color: _serviceColors[i],
-            isSelected: _service == _services[i],
-            onTap: () => setState(() => _service = _services[i]),
-          )),
+          ...List.generate(
+            _services.length,
+            (i) => _ServiceTile(
+              service: _services[i],
+              icon: _serviceIcons[i],
+              color: _serviceColors[i],
+              isSelected: _service == _services[i],
+              onTap: () => setState(() => _service = _services[i]),
+            ),
+          ),
           const SizedBox(height: 18),
 
-          Text('Patient Information', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14)),
+          Text(
+            'Patient Information',
+            style: GoogleFonts.poppins(
+              fontWeight: FontWeight.w600,
+              fontSize: 14,
+            ),
+          ),
           const SizedBox(height: 10),
           PremiumCard(
             padding: const EdgeInsets.all(18),
@@ -396,39 +569,63 @@ class _BookingScreenState extends ConsumerState<BookingScreen> with SingleTicker
               children: [
                 TextFormField(
                   controller: _nameController,
-                  decoration: const InputDecoration(hintText: 'Full name', prefixIcon: Icon(Icons.person_outline_rounded)),
+                  decoration: const InputDecoration(
+                    hintText: 'Full name',
+                    prefixIcon: Icon(Icons.person_outline_rounded),
+                  ),
                   validator: (v) => Validators.requiredField(v, 'full name'),
                 ),
                 const SizedBox(height: 14),
                 TextFormField(
                   controller: _phoneController,
                   keyboardType: TextInputType.phone,
-                  decoration: const InputDecoration(hintText: 'Phone number', prefixIcon: Icon(Icons.phone_outlined)),
+                  decoration: const InputDecoration(
+                    hintText: 'Phone number',
+                    prefixIcon: Icon(Icons.phone_outlined),
+                  ),
                   validator: (v) => Validators.requiredField(v, 'phone number'),
                 ),
                 const SizedBox(height: 14),
                 TextFormField(
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(hintText: 'Email (optional)', prefixIcon: Icon(Icons.mail_outline_rounded)),
+                  decoration: const InputDecoration(
+                    hintText: 'Email (optional)',
+                    prefixIcon: Icon(Icons.mail_outline_rounded),
+                  ),
                 ),
                 const SizedBox(height: 14),
                 TextFormField(
                   controller: _professionController,
-                  decoration: const InputDecoration(hintText: 'Profession (optional)', prefixIcon: Icon(Icons.work_outline_rounded)),
+                  decoration: const InputDecoration(
+                    hintText: 'Profession (optional)',
+                    prefixIcon: Icon(Icons.work_outline_rounded),
+                  ),
                 ),
                 const SizedBox(height: 14),
                 TextFormField(
                   controller: _reasonController,
                   maxLines: 3,
-                  decoration: const InputDecoration(hintText: 'Reason for visit *', prefixIcon: Padding(padding: EdgeInsets.only(bottom: 42), child: Icon(Icons.edit_note_rounded))),
+                  decoration: const InputDecoration(
+                    hintText: 'Reason for visit *',
+                    prefixIcon: Padding(
+                      padding: EdgeInsets.only(bottom: 42),
+                      child: Icon(Icons.edit_note_rounded),
+                    ),
+                  ),
                   validator: (v) => Validators.requiredField(v, 'visit reason'),
                 ),
                 const SizedBox(height: 14),
                 TextFormField(
                   controller: _notesController,
                   maxLines: 2,
-                  decoration: const InputDecoration(hintText: 'Additional notes (optional)', prefixIcon: Padding(padding: EdgeInsets.only(bottom: 24), child: Icon(Icons.notes_rounded))),
+                  decoration: const InputDecoration(
+                    hintText: 'Additional notes (optional)',
+                    prefixIcon: Padding(
+                      padding: EdgeInsets.only(bottom: 24),
+                      child: Icon(Icons.notes_rounded),
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 14),
                 TextFormField(
@@ -442,7 +639,9 @@ class _BookingScreenState extends ConsumerState<BookingScreen> with SingleTicker
                       onSelected: (val) {
                         setState(() {
                           _treatmentPlanTotalSessions = val;
-                          _totalSessionsController.text = val == null ? '' : val.toString();
+                          _totalSessionsController.text = val == null
+                              ? ''
+                              : val.toString();
                           if (val != null) {
                             if (_sessionNumber == null || _sessionNumber == 0) {
                               _sessionNumber = 1;
@@ -455,10 +654,34 @@ class _BookingScreenState extends ConsumerState<BookingScreen> with SingleTicker
                         });
                       },
                       itemBuilder: (_) => [
-                        PopupMenuItem(value: null, child: Text('None (Single Session)', style: GoogleFonts.poppins(fontSize: 13))),
-                        PopupMenuItem(value: 6, child: Text('6 Sessions Plan', style: GoogleFonts.poppins(fontSize: 13))),
-                        PopupMenuItem(value: 8, child: Text('8 Sessions Plan', style: GoogleFonts.poppins(fontSize: 13))),
-                        PopupMenuItem(value: 12, child: Text('12 Sessions Plan', style: GoogleFonts.poppins(fontSize: 13))),
+                        PopupMenuItem(
+                          value: null,
+                          child: Text(
+                            'None (Single Session)',
+                            style: GoogleFonts.poppins(fontSize: 13),
+                          ),
+                        ),
+                        PopupMenuItem(
+                          value: 6,
+                          child: Text(
+                            '6 Sessions Plan',
+                            style: GoogleFonts.poppins(fontSize: 13),
+                          ),
+                        ),
+                        PopupMenuItem(
+                          value: 8,
+                          child: Text(
+                            '8 Sessions Plan',
+                            style: GoogleFonts.poppins(fontSize: 13),
+                          ),
+                        ),
+                        PopupMenuItem(
+                          value: 12,
+                          child: Text(
+                            '12 Sessions Plan',
+                            style: GoogleFonts.poppins(fontSize: 13),
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -497,8 +720,12 @@ class _BookingScreenState extends ConsumerState<BookingScreen> with SingleTicker
                       if (_treatmentPlanTotalSessions == null) return null;
                       if (v == null || v.isEmpty) return 'Required';
                       final n = int.tryParse(v);
-                      if (n == null || n <= 0) return 'Must be a positive number';
-                      if (n > _treatmentPlanTotalSessions!) return 'Cannot exceed total sessions';
+                      if (n == null || n <= 0) {
+                        return 'Must be a positive number';
+                      }
+                      if (n > _treatmentPlanTotalSessions!) {
+                        return 'Cannot exceed total sessions';
+                      }
                       return null;
                     },
                     onChanged: (v) {
@@ -523,10 +750,34 @@ class _BookingScreenState extends ConsumerState<BookingScreen> with SingleTicker
                         });
                       },
                       itemBuilder: (_) => [
-                        PopupMenuItem(value: 20, child: Text('20 minutes', style: GoogleFonts.poppins(fontSize: 13))),
-                        PopupMenuItem(value: 40, child: Text('40 minutes', style: GoogleFonts.poppins(fontSize: 13))),
-                        PopupMenuItem(value: 60, child: Text('60 minutes', style: GoogleFonts.poppins(fontSize: 13))),
-                        PopupMenuItem(value: 80, child: Text('80 minutes', style: GoogleFonts.poppins(fontSize: 13))),
+                        PopupMenuItem(
+                          value: 20,
+                          child: Text(
+                            '20 minutes',
+                            style: GoogleFonts.poppins(fontSize: 13),
+                          ),
+                        ),
+                        PopupMenuItem(
+                          value: 40,
+                          child: Text(
+                            '40 minutes',
+                            style: GoogleFonts.poppins(fontSize: 13),
+                          ),
+                        ),
+                        PopupMenuItem(
+                          value: 60,
+                          child: Text(
+                            '60 minutes',
+                            style: GoogleFonts.poppins(fontSize: 13),
+                          ),
+                        ),
+                        PopupMenuItem(
+                          value: 80,
+                          child: Text(
+                            '80 minutes',
+                            style: GoogleFonts.poppins(fontSize: 13),
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -554,7 +805,11 @@ class _BookingScreenState extends ConsumerState<BookingScreen> with SingleTicker
                       color: cs.primary.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Icon(Icons.cake_rounded, color: cs.primary, size: 20),
+                    child: Icon(
+                      Icons.cake_rounded,
+                      color: cs.primary,
+                      size: 20,
+                    ),
                   ),
                   title: Text(
                     _selectedDob == null
@@ -562,13 +817,21 @@ class _BookingScreenState extends ConsumerState<BookingScreen> with SingleTicker
                         : 'DOB: ${DateFormat('d MMM y').format(_selectedDob!)}  •  Age: ${DateTime.now().year - _selectedDob!.year} yrs',
                     style: GoogleFonts.poppins(
                       fontSize: 13,
-                      fontWeight: _selectedDob == null ? FontWeight.w400 : FontWeight.w600,
-                      color: _selectedDob == null ? cs.onSurface.withValues(alpha: 0.45) : cs.onSurface,
+                      fontWeight: _selectedDob == null
+                          ? FontWeight.w400
+                          : FontWeight.w600,
+                      color: _selectedDob == null
+                          ? cs.onSurface.withValues(alpha: 0.45)
+                          : cs.onSurface,
                     ),
                   ),
                   trailing: _selectedDob != null
                       ? IconButton(
-                          icon: Icon(Icons.clear_rounded, size: 18, color: cs.onSurface.withValues(alpha: 0.4)),
+                          icon: Icon(
+                            Icons.clear_rounded,
+                            size: 18,
+                            color: cs.onSurface.withValues(alpha: 0.4),
+                          ),
                           onPressed: () => setState(() => _selectedDob = null),
                         )
                       : Icon(Icons.arrow_drop_down_rounded, color: cs.primary),
@@ -593,59 +856,98 @@ class _BookingScreenState extends ConsumerState<BookingScreen> with SingleTicker
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.photo_camera_rounded, size: 18, color: cs.primary),
+                        Icon(
+                          Icons.photo_camera_rounded,
+                          size: 18,
+                          color: cs.primary,
+                        ),
                         const SizedBox(width: 8),
-                        Text('Posture Photo (Optional)', style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600)),
+                        Text(
+                          'Posture Photo (Optional)',
+                          style: GoogleFonts.poppins(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                         const Spacer(),
                         if (_posturalPhotoPath != null)
                           TextButton.icon(
-                            icon: const Icon(Icons.delete_outline_rounded, size: 16),
+                            icon: const Icon(
+                              Icons.delete_outline_rounded,
+                              size: 16,
+                            ),
                             label: const Text('Remove'),
-                            style: TextButton.styleFrom(foregroundColor: Colors.red),
-                            onPressed: () => setState(() => _posturalPhotoPath = null),
+                            style: TextButton.styleFrom(
+                              foregroundColor: Colors.red,
+                            ),
+                            onPressed: () =>
+                                setState(() => _posturalPhotoPath = null),
                           ),
                       ],
                     ),
                     const SizedBox(height: 8),
                     if (_posturalPhotoPath != null)
                       ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: Image.file(
-                          File(_posturalPhotoPath!),
-                          height: 160,
-                          width: double.infinity,
-                          fit: BoxFit.cover,
-                        ),
-                      )
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.file(
+                        File(_posturalPhotoPath!),
+                        height: 160,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                        cacheWidth: 800,
+                      ),
+                    )
                     else
                       Row(
                         children: [
                           Expanded(
                             child: OutlinedButton.icon(
-                              icon: const Icon(Icons.camera_alt_rounded, size: 18),
+                              icon: const Icon(
+                                Icons.camera_alt_rounded,
+                                size: 18,
+                              ),
                               label: const Text('Camera'),
                               onPressed: () async {
                                 final picker = ImagePicker();
                                 final img = await picker.pickImage(
                                   source: ImageSource.camera,
-                                  imageQuality: 80,
                                 );
-                                if (img != null) setState(() => _posturalPhotoPath = img.path);
+                                if (img != null && mounted) {
+                                  final compressed =
+                                      await ImageService.compressPostureImage(
+                                        File(img.path),
+                                      );
+                                  setState(
+                                    () => _posturalPhotoPath =
+                                        compressed?.path ?? img.path,
+                                  );
+                                }
                               },
                             ),
                           ),
                           const SizedBox(width: 10),
                           Expanded(
                             child: OutlinedButton.icon(
-                              icon: const Icon(Icons.photo_library_rounded, size: 18),
+                              icon: const Icon(
+                                Icons.photo_library_rounded,
+                                size: 18,
+                              ),
                               label: const Text('Gallery'),
                               onPressed: () async {
                                 final picker = ImagePicker();
                                 final img = await picker.pickImage(
                                   source: ImageSource.gallery,
-                                  imageQuality: 80,
                                 );
-                                if (img != null) setState(() => _posturalPhotoPath = img.path);
+                                if (img != null && mounted) {
+                                  final compressed =
+                                      await ImageService.compressPostureImage(
+                                        File(img.path),
+                                      );
+                                  setState(
+                                    () => _posturalPhotoPath =
+                                        compressed?.path ?? img.path,
+                                  );
+                                }
                               },
                             ),
                           ),
@@ -660,8 +962,17 @@ class _BookingScreenState extends ConsumerState<BookingScreen> with SingleTicker
                 SwitchListTile.adaptive(
                   value: _isEmergency,
                   onChanged: (v) => setState(() => _isEmergency = v),
-                  title: Text('Emergency / High Priority', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 13)),
-                  subtitle: Text('Mark this appointment as emergency', style: GoogleFonts.poppins(fontSize: 11)),
+                  title: Text(
+                    'Emergency / High Priority',
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                  ),
+                  subtitle: Text(
+                    'Mark this appointment as emergency',
+                    style: GoogleFonts.poppins(fontSize: 11),
+                  ),
                   activeColor: const Color(0xFFEF4444),
                   secondary: Container(
                     padding: const EdgeInsets.all(8),
@@ -669,7 +980,11 @@ class _BookingScreenState extends ConsumerState<BookingScreen> with SingleTicker
                       color: const Color(0xFFEF4444).withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(Icons.warning_amber_rounded, color: Color(0xFFEF4444), size: 20),
+                    child: const Icon(
+                      Icons.warning_amber_rounded,
+                      color: Color(0xFFEF4444),
+                      size: 20,
+                    ),
                   ),
                 ),
               ],
@@ -708,17 +1023,36 @@ class _BookingScreenState extends ConsumerState<BookingScreen> with SingleTicker
             children: [
               Container(
                 padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(color: cs.primary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(14)),
-                child: Icon(Icons.calendar_month_rounded, color: cs.primary, size: 26),
+                decoration: BoxDecoration(
+                  color: cs.primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(
+                  Icons.calendar_month_rounded,
+                  color: cs.primary,
+                  size: 26,
+                ),
               ),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Select Date & Time', style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 15)),
+                    Text(
+                      'Select Date & Time',
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                      ),
+                    ),
                     const SizedBox(height: 2),
-                    Text('Set precise appointment date and time.', style: GoogleFonts.poppins(fontSize: 12, color: cs.onSurface.withValues(alpha: 0.55))),
+                    Text(
+                      'Set precise appointment date and time.',
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        color: cs.onSurface.withValues(alpha: 0.55),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -727,7 +1061,10 @@ class _BookingScreenState extends ConsumerState<BookingScreen> with SingleTicker
         ),
         const SizedBox(height: 18),
 
-        Text('Manual Date & Time Selection', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14)),
+        Text(
+          'Manual Date & Time Selection',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14),
+        ),
         const SizedBox(height: 10),
         PremiumCard(
           padding: const EdgeInsets.all(18),
@@ -737,23 +1074,39 @@ class _BookingScreenState extends ConsumerState<BookingScreen> with SingleTicker
                 contentPadding: EdgeInsets.zero,
                 leading: Container(
                   padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(color: cs.primary.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(10)),
+                  decoration: BoxDecoration(
+                    color: cs.primary.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                   child: Icon(Icons.today_rounded, color: cs.primary),
                 ),
                 title: Text(
-                  _selectedDate == null ? 'Select Date *' : DateFormat('EEEE, d MMMM y').format(_selectedDate!),
+                  _selectedDate == null
+                      ? 'Select Date *'
+                      : DateFormat('EEEE, d MMMM y').format(_selectedDate!),
                   style: GoogleFonts.poppins(
                     fontSize: 14,
-                    fontWeight: _selectedDate == null ? FontWeight.w500 : FontWeight.w700,
-                    color: _selectedDate == null ? cs.onSurface.withValues(alpha: 0.5) : cs.onSurface,
+                    fontWeight: _selectedDate == null
+                        ? FontWeight.w500
+                        : FontWeight.w700,
+                    color: _selectedDate == null
+                        ? cs.onSurface.withValues(alpha: 0.5)
+                        : cs.onSurface,
                   ),
                 ),
-                trailing: Icon(Icons.arrow_drop_down_circle_outlined, color: cs.primary),
+                trailing: Icon(
+                  Icons.arrow_drop_down_circle_outlined,
+                  color: cs.primary,
+                ),
                 onTap: () async {
                   final d = await showDatePicker(
                     context: context,
-                    initialDate: _selectedDate ?? DateTime.now().add(const Duration(days: 1)),
-                    firstDate: DateTime.now().subtract(const Duration(days: 30)),
+                    initialDate:
+                        _selectedDate ??
+                        DateTime.now().add(const Duration(days: 1)),
+                    firstDate: DateTime.now().subtract(
+                      const Duration(days: 30),
+                    ),
                     lastDate: DateTime.now().add(const Duration(days: 365)),
                   );
                   if (d != null) {
@@ -766,28 +1119,45 @@ class _BookingScreenState extends ConsumerState<BookingScreen> with SingleTicker
                 contentPadding: EdgeInsets.zero,
                 leading: Container(
                   padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(color: cs.primary.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(10)),
-                  child: Icon(Icons.access_time_filled_rounded, color: cs.primary),
+                  decoration: BoxDecoration(
+                    color: cs.primary.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    Icons.access_time_filled_rounded,
+                    color: cs.primary,
+                  ),
                 ),
                 title: Text(
                   _selectedSlot ?? 'Select Precise Time *',
                   style: GoogleFonts.poppins(
                     fontSize: 14,
-                    fontWeight: _selectedSlot == null ? FontWeight.w500 : FontWeight.w700,
-                    color: _selectedSlot == null ? cs.onSurface.withValues(alpha: 0.5) : cs.onSurface,
+                    fontWeight: _selectedSlot == null
+                        ? FontWeight.w500
+                        : FontWeight.w700,
+                    color: _selectedSlot == null
+                        ? cs.onSurface.withValues(alpha: 0.5)
+                        : cs.onSurface,
                   ),
                 ),
-                trailing: Icon(Icons.arrow_drop_down_circle_outlined, color: cs.primary),
+                trailing: Icon(
+                  Icons.arrow_drop_down_circle_outlined,
+                  color: cs.primary,
+                ),
                 onTap: () async {
                   final t = await showTimePicker(
                     context: context,
                     initialTime: _selectedSlot != null
-                        ? TimeOfDay.fromDateTime(DateFormat('hh:mm a').parse(_selectedSlot!))
+                        ? TimeOfDay.fromDateTime(
+                            DateFormat('hh:mm a').parse(_selectedSlot!),
+                          )
                         : const TimeOfDay(hour: 9, minute: 0),
                   );
                   if (t != null) {
                     final dt = DateTime(2020, 1, 1, t.hour, t.minute);
-                    setState(() => _selectedSlot = DateFormat('hh:mm a').format(dt));
+                    setState(
+                      () => _selectedSlot = DateFormat('hh:mm a').format(dt),
+                    );
                   }
                 },
               ),
@@ -802,7 +1172,10 @@ class _BookingScreenState extends ConsumerState<BookingScreen> with SingleTicker
             Expanded(
               child: Text(
                 'Quick Select Slots (Optional)',
-                style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14),
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -811,7 +1184,13 @@ class _BookingScreenState extends ConsumerState<BookingScreen> with SingleTicker
               const SizedBox(width: 8),
               TextButton(
                 onPressed: () => setState(() => _selectedSlot = null),
-                child: Text('Clear time', style: GoogleFonts.poppins(fontSize: 12, color: Colors.redAccent)),
+                child: Text(
+                  'Clear time',
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    color: Colors.redAccent,
+                  ),
+                ),
               ),
             ],
           ],
@@ -837,8 +1216,19 @@ class _BookingScreenState extends ConsumerState<BookingScreen> with SingleTicker
                 decoration: BoxDecoration(
                   color: isSelected ? cs.primary : cs.surface,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: isSelected ? cs.primary : cs.outline.withValues(alpha: 0.3)),
-                  boxShadow: isSelected ? [BoxShadow(color: cs.primary.withValues(alpha: 0.2), blurRadius: 8)] : [],
+                  border: Border.all(
+                    color: isSelected
+                        ? cs.primary
+                        : cs.outline.withValues(alpha: 0.3),
+                  ),
+                  boxShadow: isSelected
+                      ? [
+                          BoxShadow(
+                            color: cs.primary.withValues(alpha: 0.2),
+                            blurRadius: 8,
+                          ),
+                        ]
+                      : [],
                 ),
                 child: Center(
                   child: Text(
@@ -846,7 +1236,9 @@ class _BookingScreenState extends ConsumerState<BookingScreen> with SingleTicker
                     style: GoogleFonts.poppins(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: isSelected ? Colors.white : cs.onSurface.withValues(alpha: 0.7),
+                      color: isSelected
+                          ? Colors.white
+                          : cs.onSurface.withValues(alpha: 0.7),
                     ),
                   ),
                 ),
@@ -867,7 +1259,9 @@ class _BookingScreenState extends ConsumerState<BookingScreen> with SingleTicker
             Expanded(
               flex: 2,
               child: ElevatedButton(
-                onPressed: (_selectedDate != null && _selectedSlot != null) ? () => _goStep(2) : null,
+                onPressed: (_selectedDate != null && _selectedSlot != null)
+                    ? () => _goStep(2)
+                    : null,
                 child: const Text('Review Booking'),
               ),
             ),
@@ -891,20 +1285,67 @@ class _BookingScreenState extends ConsumerState<BookingScreen> with SingleTicker
                 children: [
                   Container(
                     padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(color: AppColors.statusConfirmedBg, borderRadius: BorderRadius.circular(12)),
-                    child: const Icon(Icons.check_circle_rounded, color: AppColors.statusConfirmed, size: 24),
+                    decoration: BoxDecoration(
+                      color: AppColors.statusConfirmedBg,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(
+                      Icons.check_circle_rounded,
+                      color: AppColors.statusConfirmed,
+                      size: 24,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Review your booking', style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 15)),
-                      Text('Confirm details below', style: GoogleFonts.poppins(fontSize: 12, color: cs.onSurface.withValues(alpha: 0.55))),
+                      Text(
+                        'Review your booking',
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15,
+                        ),
+                      ),
+                      Text(
+                        'Confirm details below',
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          color: cs.onSurface.withValues(alpha: 0.55),
+                        ),
+                      ),
                     ],
                   ),
                 ],
               ),
               const SizedBox(height: 18),
+              const Divider(),
+              const SizedBox(height: 14),
+              Text(
+                'Payment Selection',
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 10),
+              _buildPaymentOption(
+                mode: PaymentMode.online,
+                title: 'Pay Online Now',
+                subtitle: 'Secure card/wallet payment',
+                icon: Icons.account_balance_wallet_rounded,
+                color: Colors.blueAccent,
+                cs: cs,
+              ),
+              const SizedBox(height: 10),
+              _buildPaymentOption(
+                mode: PaymentMode.cash,
+                title: 'Pay at Clinic / Cash',
+                subtitle: 'Pay at arrival on appointment',
+                icon: Icons.payments_rounded,
+                color: Colors.green,
+                cs: cs,
+              ),
+              const SizedBox(height: 14),
               const Divider(),
               const SizedBox(height: 14),
               _ConfirmRow(label: 'Patient', value: _nameController.text),
@@ -913,32 +1354,61 @@ class _BookingScreenState extends ConsumerState<BookingScreen> with SingleTicker
                 _ConfirmRow(label: 'Email', value: _emailController.text),
               _ConfirmRow(label: 'Treatment', value: _service),
               if (_selectedDate != null)
-                _ConfirmRow(label: 'Date', value: DateFormat('EEEE, d MMMM y').format(_selectedDate!)),
+                _ConfirmRow(
+                  label: 'Date',
+                  value: DateFormat('EEEE, d MMMM y').format(_selectedDate!),
+                ),
               if (_selectedSlot != null)
                 _ConfirmRow(label: 'Time', value: _selectedSlot!),
               _ConfirmRow(label: 'Doctor', value: 'DR. BASHIR AHMAD'),
               if (_treatmentPlanTotalSessions != null)
                 _ConfirmRow(
                   label: 'Treatment Plan',
-                  value: 'Session ${_sessionNumber ?? 1} of $_treatmentPlanTotalSessions Sessions Plan',
+                  value:
+                      'Session ${_sessionNumber ?? 1} of $_treatmentPlanTotalSessions Sessions Plan',
                 ),
-              _ConfirmRow(label: 'Duration', value: '$_durationMinutes minutes'),
+              _ConfirmRow(
+                label: 'Duration',
+                value: '$_durationMinutes minutes',
+              ),
               if (_selectedDob != null)
                 _ConfirmRow(
                   label: 'DOB / Age',
-                  value: '${DateFormat('d MMM y').format(_selectedDob!)}  •  ${DateTime.now().year - _selectedDob!.year} yrs',
+                  value:
+                      '${DateFormat('d MMM y').format(_selectedDob!)}  •  ${DateTime.now().year - _selectedDob!.year} yrs',
                 ),
               if (_isEmergency)
-                _ConfirmRow(label: 'Priority', value: 'EMERGENCY (Custom Time)'),
+                _ConfirmRow(
+                  label: 'Priority',
+                  value: 'EMERGENCY (Custom Time)',
+                ),
               if (_reasonController.text.isNotEmpty)
                 _ConfirmRow(label: 'Reason', value: _reasonController.text),
+              _ConfirmRow(
+                label: 'Total Fee',
+                value: 'Rs. ${_currentPrice.toStringAsFixed(0)}',
+              ),
               if (_posturalPhotoPath != null) ...[
                 const SizedBox(height: 8),
-                Text('Posture Photo', style: GoogleFonts.poppins(fontSize: 12, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5))),
+                Text(
+                  'Posture Photo',
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withValues(alpha: 0.5),
+                  ),
+                ),
                 const SizedBox(height: 6),
                 ClipRRect(
                   borderRadius: BorderRadius.circular(10),
-                  child: Image.file(File(_posturalPhotoPath!), height: 120, width: double.infinity, fit: BoxFit.cover),
+                  child: Image.file(
+                    File(_posturalPhotoPath!),
+                    height: 120,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                    cacheWidth: 800,
+                  ),
                 ),
               ],
               const SizedBox(height: 6),
@@ -952,9 +1422,21 @@ class _BookingScreenState extends ConsumerState<BookingScreen> with SingleTicker
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.info_outline_rounded, color: AppColors.statusPending, size: 18),
+                    const Icon(
+                      Icons.info_outline_rounded,
+                      color: AppColors.statusPending,
+                      size: 18,
+                    ),
                     const SizedBox(width: 10),
-                    Expanded(child: Text('Appointment will be marked as Pending until confirmed by the clinic.', style: GoogleFonts.poppins(fontSize: 12, color: AppColors.statusPending))),
+                    Expanded(
+                      child: Text(
+                        'Appointment will be marked as Pending until confirmed by the clinic.',
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          color: AppColors.statusPending,
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -965,7 +1447,10 @@ class _BookingScreenState extends ConsumerState<BookingScreen> with SingleTicker
         Row(
           children: [
             Expanded(
-              child: OutlinedButton(onPressed: () => _goStep(1), child: const Text('Back')),
+              child: OutlinedButton(
+                onPressed: () => _goStep(1),
+                child: const Text('Back'),
+              ),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -973,13 +1458,87 @@ class _BookingScreenState extends ConsumerState<BookingScreen> with SingleTicker
               child: ElevatedButton(
                 onPressed: _isSubmitting ? null : _submitBooking,
                 child: _isSubmitting
-                    ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white))
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          color: Colors.white,
+                        ),
+                      )
                     : const Text('Confirm Booking ✓'),
               ),
             ),
           ],
         ),
       ],
+    );
+  }
+
+  Widget _buildPaymentOption({
+    required PaymentMode mode,
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required Color color,
+    required ColorScheme cs,
+  }) {
+    final bool isSelected = _paymentMode == mode;
+    return GestureDetector(
+      onTap: () => setState(() => _paymentMode = mode),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: isSelected ? color.withValues(alpha: 0.08) : cs.surface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isSelected ? color : cs.outline.withValues(alpha: 0.2),
+            width: isSelected ? 2 : 1.5,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: isSelected ? color.withValues(alpha: 0.12) : cs.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(
+                icon,
+                color: isSelected ? color : cs.onSurface.withValues(alpha: 0.5),
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13.5,
+                      color: isSelected ? color : cs.onSurface,
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: GoogleFonts.poppins(
+                      fontSize: 11,
+                      color: cs.onSurface.withValues(alpha: 0.5),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (isSelected)
+              Icon(Icons.check_circle_rounded, color: color, size: 22),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -1015,17 +1574,53 @@ class _StepIndicator extends StatelessWidget {
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         color: isActive ? cs.primary : cs.surface,
-                        border: Border.all(color: isActive ? cs.primary : cs.outline.withValues(alpha: 0.3), width: 1.5),
-                        boxShadow: isCurrent ? [BoxShadow(color: cs.primary.withValues(alpha: 0.3), blurRadius: 10)] : [],
+                        border: Border.all(
+                          color: isActive
+                              ? cs.primary
+                              : cs.outline.withValues(alpha: 0.3),
+                          width: 1.5,
+                        ),
+                        boxShadow: isCurrent
+                            ? [
+                                BoxShadow(
+                                  color: cs.primary.withValues(alpha: 0.3),
+                                  blurRadius: 10,
+                                ),
+                              ]
+                            : [],
                       ),
                       child: Center(
                         child: isActive && i < currentStep
-                            ? const Icon(Icons.check_rounded, color: Colors.white, size: 16)
-                            : Text('${i + 1}', style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w700, color: isActive ? Colors.white : cs.onSurface.withValues(alpha: 0.4))),
+                            ? const Icon(
+                                Icons.check_rounded,
+                                color: Colors.white,
+                                size: 16,
+                              )
+                            : Text(
+                                '${i + 1}',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: isActive
+                                      ? Colors.white
+                                      : cs.onSurface.withValues(alpha: 0.4),
+                                ),
+                              ),
                       ),
                     ),
                     const SizedBox(height: 4),
-                    Text(_labels[i], style: GoogleFonts.poppins(fontSize: 10, fontWeight: isCurrent ? FontWeight.w600 : FontWeight.w400, color: isActive ? cs.primary : cs.onSurface.withValues(alpha: 0.4))),
+                    Text(
+                      _labels[i],
+                      style: GoogleFonts.poppins(
+                        fontSize: 10,
+                        fontWeight: isCurrent
+                            ? FontWeight.w600
+                            : FontWeight.w400,
+                        color: isActive
+                            ? cs.primary
+                            : cs.onSurface.withValues(alpha: 0.4),
+                      ),
+                    ),
                   ],
                 ),
                 if (i < 2)
@@ -1033,7 +1628,9 @@ class _StepIndicator extends StatelessWidget {
                     child: Container(
                       height: 1.5,
                       margin: const EdgeInsets.only(bottom: 20),
-                      color: i < currentStep ? cs.primary : cs.outline.withValues(alpha: 0.25),
+                      color: i < currentStep
+                          ? cs.primary
+                          : cs.outline.withValues(alpha: 0.25),
                     ),
                   ),
               ],
@@ -1046,7 +1643,13 @@ class _StepIndicator extends StatelessWidget {
 }
 
 class _ServiceTile extends StatelessWidget {
-  const _ServiceTile({required this.service, required this.icon, required this.color, required this.isSelected, required this.onTap});
+  const _ServiceTile({
+    required this.service,
+    required this.icon,
+    required this.color,
+    required this.isSelected,
+    required this.onTap,
+  });
   final String service;
   final IconData icon;
   final Color color;
@@ -1062,21 +1665,41 @@ class _ServiceTile extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: isSelected ? color.withValues(alpha: 0.1) : Theme.of(context).colorScheme.surface,
+          color: isSelected
+              ? color.withValues(alpha: 0.1)
+              : Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: isSelected ? color : Theme.of(context).colorScheme.outline.withValues(alpha: 0.2), width: 1.5),
+          border: Border.all(
+            color: isSelected
+                ? color
+                : Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+            width: 1.5,
+          ),
         ),
         child: Row(
           children: [
             Container(
               padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(10)),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
               child: Icon(icon, color: color, size: 18),
             ),
             const SizedBox(width: 12),
-            Text(service, style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 13, color: isSelected ? color : Theme.of(context).colorScheme.onSurface)),
+            Text(
+              service,
+              style: GoogleFonts.poppins(
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+                color: isSelected
+                    ? color
+                    : Theme.of(context).colorScheme.onSurface,
+              ),
+            ),
             const Spacer(),
-            if (isSelected) Icon(Icons.check_circle_rounded, color: color, size: 20),
+            if (isSelected)
+              Icon(Icons.check_circle_rounded, color: color, size: 20),
           ],
         ),
       ),
@@ -1097,9 +1720,26 @@ class _ConfirmRow extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(width: 80, child: Text(label, style: GoogleFonts.poppins(fontSize: 13, color: cs.onSurface.withValues(alpha: 0.5)))),
+          SizedBox(
+            width: 80,
+            child: Text(
+              label,
+              style: GoogleFonts.poppins(
+                fontSize: 13,
+                color: cs.onSurface.withValues(alpha: 0.5),
+              ),
+            ),
+          ),
           const SizedBox(width: 12),
-          Expanded(child: Text(value, style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600))),
+          Expanded(
+            child: Text(
+              value,
+              style: GoogleFonts.poppins(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
         ],
       ),
     );

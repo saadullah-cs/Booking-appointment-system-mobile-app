@@ -12,7 +12,8 @@ class StaffManagementScreen extends ConsumerStatefulWidget {
   const StaffManagementScreen({super.key});
 
   @override
-  ConsumerState<StaffManagementScreen> createState() => _StaffManagementScreenState();
+  ConsumerState<StaffManagementScreen> createState() =>
+      _StaffManagementScreenState();
 }
 
 class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen> {
@@ -43,15 +44,24 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen> {
   Future<void> _toggleAccess(bool value) async {
     setState(() => _allowStaffView = value);
     await ref.read(authRepositoryProvider).setStaffViewToggle(value);
-    _showSnackBar(value ? 'Staff access enabled. Appointments can be viewed online.' : 'Staff access disabled. Appointments hidden.');
+    _showSnackBar(
+      value
+          ? 'Staff access enabled. Appointments can be viewed online.'
+          : 'Staff access disabled. Appointments hidden.',
+    );
   }
 
   void _showSnackBar(String msg, {bool isError = false}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(msg, style: GoogleFonts.poppins(fontWeight: FontWeight.w500)),
-        backgroundColor: isError ? Theme.of(context).colorScheme.error : AppColors.primary,
+        content: Text(
+          msg,
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w500),
+        ),
+        backgroundColor: isError
+            ? Theme.of(context).colorScheme.error
+            : AppColors.primary,
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -59,8 +69,12 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen> {
 
   Future<void> _addOrEditStaff({Map<String, String>? existingStaff}) async {
     final isEdit = existingStaff != null;
-    final emailController = TextEditingController(text: existingStaff?['email'] ?? '');
-    final passwordController = TextEditingController(text: existingStaff?['password'] ?? '');
+    final emailController = TextEditingController(
+      text: existingStaff?['email'] ?? '',
+    );
+    final passwordController = TextEditingController(
+      text: existingStaff?['password'] ?? '',
+    );
     final formKey = GlobalKey<FormState>();
 
     await showDialog(
@@ -87,7 +101,9 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen> {
                     ),
                     keyboardType: TextInputType.emailAddress,
                     validator: (val) {
-                      if (val == null || val.trim().isEmpty) return 'Email is required';
+                      if (val == null || val.trim().isEmpty) {
+                        return 'Email is required';
+                      }
                       if (!val.contains('@')) return 'Enter a valid email';
                       return null;
                     },
@@ -96,7 +112,10 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen> {
                 ] else ...[
                   Text(
                     'Editing: ${existingStaff['email']}',
-                    style: GoogleFonts.poppins(fontWeight: FontWeight.w600, color: cs.primary),
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w600,
+                      color: cs.primary,
+                    ),
                   ),
                   const SizedBox(height: 12),
                 ],
@@ -109,8 +128,12 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen> {
                   ),
                   obscureText: true,
                   validator: (val) {
-                    if (val == null || val.trim().isEmpty) return 'Password is required';
-                    if (val.trim().length < 6) return 'Password must be at least 6 characters';
+                    if (val == null || val.trim().isEmpty) {
+                      return 'Password is required';
+                    }
+                    if (val.trim().length < 6) {
+                      return 'Password must be at least 6 characters';
+                    }
                     return null;
                   },
                 ),
@@ -120,20 +143,31 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: Text('Cancel', style: GoogleFonts.poppins(color: cs.onSurface.withValues(alpha: 0.6))),
+              child: Text(
+                'Cancel',
+                style: GoogleFonts.poppins(
+                  color: cs.onSurface.withValues(alpha: 0.6),
+                ),
+              ),
             ),
             ElevatedButton(
               onPressed: () async {
                 if (formKey.currentState?.validate() != true) return;
                 Navigator.pop(ctx);
-                
+
                 final email = emailController.text.trim();
                 final password = passwordController.text.trim();
-                
+
                 setState(() => _isLoading = true);
                 try {
-                  await ref.read(authRepositoryProvider).addStaffCredential(email, password);
-                  _showSnackBar(isEdit ? 'Staff credentials updated.' : 'Staff member added successfully!');
+                  await ref
+                      .read(authRepositoryProvider)
+                      .addStaffCredential(email, password);
+                  _showSnackBar(
+                    isEdit
+                        ? 'Staff credentials updated.'
+                        : 'Staff member added successfully!',
+                  );
                   await _loadData();
                 } catch (e) {
                   _showSnackBar('Operation failed: $e', isError: true);
@@ -152,16 +186,35 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Delete Staff Account', style: GoogleFonts.poppins(fontWeight: FontWeight.w700)),
-        content: Text('Are you sure you want to delete credentials for $email? They will no longer be able to log in.', style: GoogleFonts.poppins()),
+        title: Text(
+          'Delete Staff Account',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w700),
+        ),
+        content: Text(
+          'Are you sure you want to delete credentials for $email? They will no longer be able to log in.',
+          style: GoogleFonts.poppins(),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: Text('Cancel', style: GoogleFonts.poppins(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6))),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.poppins(
+                color: Theme.of(
+                  context,
+                ).colorScheme.onSurface.withValues(alpha: 0.6),
+              ),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: Text('Delete', style: GoogleFonts.poppins(color: Theme.of(context).colorScheme.error, fontWeight: FontWeight.bold)),
+            child: Text(
+              'Delete',
+              style: GoogleFonts.poppins(
+                color: Theme.of(context).colorScheme.error,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
         ],
       ),
@@ -203,7 +256,11 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen> {
                     color: cs.primary.withValues(alpha: 0.1),
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(Icons.people_alt_rounded, color: cs.primary, size: 26),
+                  child: Icon(
+                    Icons.people_alt_rounded,
+                    color: cs.primary,
+                    size: 26,
+                  ),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -212,11 +269,18 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen> {
                     children: [
                       Text(
                         'Staff Portal Control',
-                        style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w700, color: cs.onSurface),
+                        style: GoogleFonts.poppins(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: cs.onSurface,
+                        ),
                       ),
                       Text(
                         'Manage staff credentials and toggle appointments access for the separate Staff App.',
-                        style: GoogleFonts.poppins(fontSize: 11.5, color: cs.onSurface.withValues(alpha: 0.6)),
+                        style: GoogleFonts.poppins(
+                          fontSize: 11.5,
+                          color: cs.onSurface.withValues(alpha: 0.6),
+                        ),
                       ),
                     ],
                   ),
@@ -229,7 +293,12 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen> {
           // Access Switch
           Text(
             'APPOINTMENTS ACCESS STATUS',
-            style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w700, color: cs.primary, letterSpacing: 0.5),
+            style: GoogleFonts.poppins(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: cs.primary,
+              letterSpacing: 0.5,
+            ),
           ),
           const SizedBox(height: 10),
           PremiumCard(
@@ -237,16 +306,28 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen> {
             child: SwitchListTile.adaptive(
               value: _allowStaffView,
               onChanged: _toggleAccess,
-              title: Text('Allow Staff to View Bookings', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14)),
-              subtitle: Text('Enable or disable appointment listing on the Staff App.', style: GoogleFonts.poppins(fontSize: 12)),
+              title: Text(
+                'Allow Staff to View Bookings',
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
+              ),
+              subtitle: Text(
+                'Enable or disable appointment listing on the Staff App.',
+                style: GoogleFonts.poppins(fontSize: 12),
+              ),
               secondary: Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: (_allowStaffView ? cs.primary : Colors.grey).withValues(alpha: 0.08),
+                  color: (_allowStaffView ? cs.primary : Colors.grey)
+                      .withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(
-                  _allowStaffView ? Icons.visibility_rounded : Icons.visibility_off_rounded,
+                  _allowStaffView
+                      ? Icons.visibility_rounded
+                      : Icons.visibility_off_rounded,
                   color: _allowStaffView ? cs.primary : Colors.grey,
                   size: 20,
                 ),
@@ -261,13 +342,26 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen> {
             children: [
               Text(
                 'STAFF LOGIN ACCOUNTS',
-                style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w700, color: cs.primary, letterSpacing: 0.5),
+                style: GoogleFonts.poppins(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: cs.primary,
+                  letterSpacing: 0.5,
+                ),
               ),
               TextButton.icon(
                 onPressed: () => _addOrEditStaff(),
                 icon: const Icon(Icons.add, size: 16),
-                label: Text('Add Account', style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w700)),
-                style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                label: Text(
+                  'Add Account',
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                ),
               ),
             ],
           ),
@@ -279,16 +373,27 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen> {
               padding: const EdgeInsets.all(32),
               child: Column(
                 children: [
-                  Icon(Icons.badge_outlined, size: 40, color: cs.onSurface.withValues(alpha: 0.3)),
+                  Icon(
+                    Icons.badge_outlined,
+                    size: 40,
+                    color: cs.onSurface.withValues(alpha: 0.3),
+                  ),
                   const SizedBox(height: 12),
                   Text(
                     'No Staff Accounts Added',
-                    style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface.withValues(alpha: 0.7)),
+                    style: GoogleFonts.poppins(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: cs.onSurface.withValues(alpha: 0.7),
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     'Add staff logins so they can access the appointment reminders on their devices.',
-                    style: GoogleFonts.poppins(fontSize: 12, color: cs.onSurface.withValues(alpha: 0.5)),
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      color: cs.onSurface.withValues(alpha: 0.5),
+                    ),
                     textAlign: TextAlign.center,
                   ),
                 ],
@@ -301,38 +406,57 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen> {
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: _staffList.length,
-                separatorBuilder: (ctx, i) => const Divider(indent: 16, endIndent: 16),
+                separatorBuilder: (ctx, i) =>
+                    const Divider(indent: 16, endIndent: 16),
                 itemBuilder: (ctx, index) {
                   final staff = _staffList[index];
                   final email = staff['email'] ?? '';
                   return ListTile(
                     leading: CircleAvatar(
                       backgroundColor: cs.primary.withValues(alpha: 0.1),
-                      child: Icon(Icons.person_outline_rounded, color: cs.primary, size: 20),
+                      child: Icon(
+                        Icons.person_outline_rounded,
+                        color: cs.primary,
+                        size: 20,
+                      ),
                     ),
                     title: Text(
                       email,
-                      style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14),
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
                     ),
                     subtitle: Text(
                       'Access: Appointments only',
-                      style: GoogleFonts.poppins(fontSize: 11, color: cs.onSurface.withValues(alpha: 0.5)),
+                      style: GoogleFonts.poppins(
+                        fontSize: 11,
+                        color: cs.onSurface.withValues(alpha: 0.5),
+                      ),
                     ),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         IconButton(
-                          icon: const Icon(Icons.chat_bubble_outline_rounded, size: 20),
+                          icon: const Icon(
+                            Icons.chat_bubble_outline_rounded,
+                            size: 20,
+                          ),
                           tooltip: 'Clinic Chat',
                           onPressed: () => context.push('/chat'),
                         ),
                         IconButton(
                           icon: const Icon(Icons.edit_outlined, size: 20),
                           tooltip: 'Edit Password',
-                          onPressed: () => _addOrEditStaff(existingStaff: staff),
+                          onPressed: () =>
+                              _addOrEditStaff(existingStaff: staff),
                         ),
                         IconButton(
-                          icon: Icon(Icons.delete_outline_rounded, size: 20, color: cs.error),
+                          icon: Icon(
+                            Icons.delete_outline_rounded,
+                            size: 20,
+                            color: cs.error,
+                          ),
                           tooltip: 'Delete Account',
                           onPressed: () => _deleteStaff(email),
                         ),
@@ -347,7 +471,12 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen> {
             const SizedBox(height: 24),
             Text(
               'STAFF APP LIVE PREVIEW',
-              style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w700, color: cs.primary, letterSpacing: 0.5),
+              style: GoogleFonts.poppins(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: cs.primary,
+                letterSpacing: 0.5,
+              ),
             ),
             const SizedBox(height: 10),
             PremiumCard(
@@ -356,12 +485,19 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen> {
                 children: [
                   Text(
                     'Interactive Live Preview',
-                    style: GoogleFonts.poppins(fontSize: 15, fontWeight: FontWeight.bold, color: cs.onSurface),
+                    style: GoogleFonts.poppins(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: cs.onSurface,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     'Simulate how staff members will see the portal on their devices in real-time.',
-                    style: GoogleFonts.poppins(fontSize: 11.5, color: cs.onSurface.withValues(alpha: 0.6)),
+                    style: GoogleFonts.poppins(
+                      fontSize: 11.5,
+                      color: cs.onSurface.withValues(alpha: 0.6),
+                    ),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 24),
@@ -386,61 +522,63 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : isWide
-              ? Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Left Column: Control settings panel
-                    Expanded(
-                      flex: 4,
-                      child: SingleChildScrollView(
-                        child: buildSettingsPanel(),
-                      ),
+          ? Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Left Column: Control settings panel
+                Expanded(
+                  flex: 4,
+                  child: SingleChildScrollView(child: buildSettingsPanel()),
+                ),
+                // Vertical Separator
+                VerticalDivider(
+                  width: 1,
+                  thickness: 1,
+                  color: cs.onSurface.withValues(alpha: 0.08),
+                ),
+                // Right Column: Interactive Live Preview mockup
+                Expanded(
+                  flex: 3,
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 24,
+                      horizontal: 16,
                     ),
-                    // Vertical Separator
-                    VerticalDivider(
-                      width: 1,
-                      thickness: 1,
-                      color: cs.onSurface.withValues(alpha: 0.08),
-                    ),
-                    // Right Column: Interactive Live Preview mockup
-                    Expanded(
-                      flex: 3,
-                      child: SingleChildScrollView(
-                        padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
-                        child: Column(
-                          children: [
-                            Text(
-                              'Interactive Live Preview',
-                              style: GoogleFonts.poppins(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: cs.onSurface,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Select a tab inside the mockup below to test screen states. Disabling view access will instantly lock the dashboard screen in real-time.',
-                              style: GoogleFonts.poppins(
-                                fontSize: 12,
-                                color: cs.onSurface.withValues(alpha: 0.6),
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 24),
-                            Center(
-                              child: StaffAppPreviewMock(
-                                allowStaffView: _allowStaffView,
-                                activeTab: _previewTab,
-                                onTabChanged: (tab) => setState(() => _previewTab = tab),
-                              ),
-                            ),
-                          ],
+                    child: Column(
+                      children: [
+                        Text(
+                          'Interactive Live Preview',
+                          style: GoogleFonts.poppins(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: cs.onSurface,
+                          ),
                         ),
-                      ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Select a tab inside the mockup below to test screen states. Disabling view access will instantly lock the dashboard screen in real-time.',
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            color: cs.onSurface.withValues(alpha: 0.6),
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 24),
+                        Center(
+                          child: StaffAppPreviewMock(
+                            allowStaffView: _allowStaffView,
+                            activeTab: _previewTab,
+                            onTabChanged: (tab) =>
+                                setState(() => _previewTab = tab),
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                )
-              : buildSettingsPanel(),
+                  ),
+                ),
+              ],
+            )
+          : buildSettingsPanel(),
     );
   }
 }
@@ -471,7 +609,9 @@ class StaffAppPreviewMock extends StatelessWidget {
         color: isDark ? const Color(0xFF0F172A) : const Color(0xFFE2E8F0),
         borderRadius: BorderRadius.circular(36),
         border: Border.all(
-          color: isDark ? Colors.white.withValues(alpha: 0.2) : Colors.black.withValues(alpha: 0.2),
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.2)
+              : Colors.black.withValues(alpha: 0.2),
           width: 8,
         ),
         boxShadow: [
@@ -504,8 +644,12 @@ class StaffAppPreviewMock extends StatelessWidget {
                   width: 50,
                   height: 14,
                   decoration: BoxDecoration(
-                    color: isDark ? Colors.white.withValues(alpha: 0.2) : Colors.black.withValues(alpha: 0.2),
-                    borderRadius: const BorderRadius.vertical(bottom: Radius.circular(8)),
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.2)
+                        : Colors.black.withValues(alpha: 0.2),
+                    borderRadius: const BorderRadius.vertical(
+                      bottom: Radius.circular(8),
+                    ),
                   ),
                 ),
                 Icon(
@@ -522,7 +666,9 @@ class StaffAppPreviewMock extends StatelessWidget {
             child: ClipRRect(
               borderRadius: BorderRadius.circular(20),
               child: Container(
-                color: isDark ? const Color(0xFF070F1C) : const Color(0xFFF8FAFC),
+                color: isDark
+                    ? const Color(0xFF070F1C)
+                    : const Color(0xFFF8FAFC),
                 child: _buildScreenContent(context),
               ),
             ),
@@ -534,17 +680,43 @@ class StaffAppPreviewMock extends StatelessWidget {
             decoration: BoxDecoration(
               border: Border(
                 top: BorderSide(
-                  color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.1),
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.1)
+                      : Colors.black.withValues(alpha: 0.1),
                 ),
               ),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                _buildMockTabButton(Icons.lock_rounded, 'Login', 'login', isDark, cs),
-                _buildMockTabButton(Icons.security_rounded, 'PIN Lock', 'lock', isDark, cs),
-                _buildMockTabButton(Icons.dashboard_rounded, 'Dashboard', 'dashboard', isDark, cs),
-                _buildMockTabButton(Icons.gpp_maybe_rounded, 'Suspended', 'suspended', isDark, cs),
+                _buildMockTabButton(
+                  Icons.lock_rounded,
+                  'Login',
+                  'login',
+                  isDark,
+                  cs,
+                ),
+                _buildMockTabButton(
+                  Icons.security_rounded,
+                  'PIN Lock',
+                  'lock',
+                  isDark,
+                  cs,
+                ),
+                _buildMockTabButton(
+                  Icons.dashboard_rounded,
+                  'Dashboard',
+                  'dashboard',
+                  isDark,
+                  cs,
+                ),
+                _buildMockTabButton(
+                  Icons.gpp_maybe_rounded,
+                  'Suspended',
+                  'suspended',
+                  isDark,
+                  cs,
+                ),
               ],
             ),
           ),
@@ -553,7 +725,13 @@ class StaffAppPreviewMock extends StatelessWidget {
     );
   }
 
-  Widget _buildMockTabButton(IconData icon, String label, String tab, bool isDark, ColorScheme cs) {
+  Widget _buildMockTabButton(
+    IconData icon,
+    String label,
+    String tab,
+    bool isDark,
+    ColorScheme cs,
+  ) {
     final isSelected = activeTab == tab;
     return GestureDetector(
       onTap: () => onTabChanged(tab),
@@ -563,7 +741,9 @@ class StaffAppPreviewMock extends StatelessWidget {
           Icon(
             icon,
             size: 16,
-            color: isSelected ? cs.primary : (isDark ? Colors.white38 : Colors.black38),
+            color: isSelected
+                ? cs.primary
+                : (isDark ? Colors.white38 : Colors.black38),
           ),
           const SizedBox(height: 2),
           Text(
@@ -571,7 +751,9 @@ class StaffAppPreviewMock extends StatelessWidget {
             style: GoogleFonts.poppins(
               fontSize: 8,
               fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-              color: isSelected ? cs.primary : (isDark ? Colors.white38 : Colors.black38),
+              color: isSelected
+                  ? cs.primary
+                  : (isDark ? Colors.white38 : Colors.black38),
             ),
           ),
         ],
@@ -594,17 +776,28 @@ class StaffAppPreviewMock extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.gpp_maybe_rounded, size: 48, color: Colors.amber),
+              const Icon(
+                Icons.gpp_maybe_rounded,
+                size: 48,
+                color: Colors.amber,
+              ),
               const SizedBox(height: 12),
               Text(
                 'Access Suspended',
-                style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.bold, color: cs.onSurface),
+                style: GoogleFonts.poppins(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: cs.onSurface,
+                ),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 6),
               Text(
                 'The Clinic Administrator has currently disabled staff-side appointment views.',
-                style: GoogleFonts.poppins(fontSize: 10, color: cs.onSurface.withValues(alpha: 0.6)),
+                style: GoogleFonts.poppins(
+                  fontSize: 10,
+                  color: cs.onSurface.withValues(alpha: 0.6),
+                ),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 16),
@@ -618,7 +811,11 @@ class StaffAppPreviewMock extends StatelessWidget {
                 ),
                 child: Text(
                   'Exit Portal',
-                  style: GoogleFonts.poppins(fontSize: 10, color: cs.onPrimary, fontWeight: FontWeight.bold),
+                  style: GoogleFonts.poppins(
+                    fontSize: 10,
+                    color: cs.onPrimary,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ],
@@ -633,10 +830,7 @@ class StaffAppPreviewMock extends StatelessWidget {
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [
-                Color(0xFF0F172A),
-                Color(0xFF1E293B),
-              ],
+              colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
             ),
           ),
           child: Column(
@@ -646,17 +840,25 @@ class StaffAppPreviewMock extends StatelessWidget {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.06),
+                  color: Colors.white.withValues(alpha: 0.06),
                   shape: BoxShape.circle,
                   border: Border.all(color: cs.primary, width: 2),
                 ),
                 alignment: Alignment.center,
-                child: const Icon(Icons.badge_rounded, size: 20, color: Colors.white),
+                child: const Icon(
+                  Icons.badge_rounded,
+                  size: 20,
+                  color: Colors.white,
+                ),
               ),
               const SizedBox(height: 10),
               Text(
                 'RECEPTIONIST',
-                style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
+                style: GoogleFonts.poppins(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
               ),
               Text(
                 'Enter 4-Digit PIN to unlock',
@@ -688,17 +890,29 @@ class StaffAppPreviewMock extends StatelessWidget {
                   children: [
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: ['1', '2', '3'].map((d) => _buildMockKey(d)).toList(),
+                      children: [
+                        '1',
+                        '2',
+                        '3',
+                      ].map((d) => _buildMockKey(d)).toList(),
                     ),
                     const SizedBox(height: 8),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: ['4', '5', '6'].map((d) => _buildMockKey(d)).toList(),
+                      children: [
+                        '4',
+                        '5',
+                        '6',
+                      ].map((d) => _buildMockKey(d)).toList(),
                     ),
                     const SizedBox(height: 8),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: ['7', '8', '9'].map((d) => _buildMockKey(d)).toList(),
+                      children: [
+                        '7',
+                        '8',
+                        '9',
+                      ].map((d) => _buildMockKey(d)).toList(),
                     ),
                     const SizedBox(height: 8),
                     Row(
@@ -706,7 +920,11 @@ class StaffAppPreviewMock extends StatelessWidget {
                       children: [
                         const SizedBox(width: 32, height: 32),
                         _buildMockKey('0'),
-                        const Icon(Icons.backspace_outlined, color: Colors.white70, size: 14),
+                        const Icon(
+                          Icons.backspace_outlined,
+                          color: Colors.white70,
+                          size: 14,
+                        ),
                       ],
                     ),
                   ],
@@ -732,11 +950,18 @@ class StaffAppPreviewMock extends StatelessWidget {
                     children: [
                       Text(
                         'Staff Dashboard',
-                        style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w800, color: cs.onSurface),
+                        style: GoogleFonts.poppins(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                          color: cs.onSurface,
+                        ),
                       ),
                       Text(
                         'Signed in: receptionist@gct.com',
-                        style: GoogleFonts.poppins(fontSize: 8, color: cs.onSurface.withValues(alpha: 0.6)),
+                        style: GoogleFonts.poppins(
+                          fontSize: 8,
+                          color: cs.onSurface.withValues(alpha: 0.6),
+                        ),
                       ),
                     ],
                   ),
@@ -766,11 +991,19 @@ class StaffAppPreviewMock extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.analytics_rounded, color: cs.primary, size: 12),
+                        Icon(
+                          Icons.analytics_rounded,
+                          color: cs.primary,
+                          size: 12,
+                        ),
                         const SizedBox(width: 4),
                         Text(
                           'Appointments Quick View',
-                          style: GoogleFonts.poppins(fontSize: 9, fontWeight: FontWeight.bold, color: cs.onSurface),
+                          style: GoogleFonts.poppins(
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                            color: cs.onSurface,
+                          ),
                         ),
                       ],
                     ),
@@ -778,11 +1011,29 @@ class StaffAppPreviewMock extends StatelessWidget {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
-                        _buildMockStatItemVertical('TODAY', '3', Icons.calendar_today_rounded, cs.primary, cs),
+                        _buildMockStatItemVertical(
+                          'TODAY',
+                          '3',
+                          Icons.calendar_today_rounded,
+                          cs.primary,
+                          cs,
+                        ),
                         _buildMockDivider(),
-                        _buildMockStatItemVertical('PENDING', '1', Icons.hourglass_empty_rounded, Colors.amber, cs),
+                        _buildMockStatItemVertical(
+                          'PENDING',
+                          '1',
+                          Icons.hourglass_empty_rounded,
+                          Colors.amber,
+                          cs,
+                        ),
                         _buildMockDivider(),
-                        _buildMockStatItemVertical('CONFIRMED', '2', Icons.check_circle_outline_rounded, Colors.green, cs),
+                        _buildMockStatItemVertical(
+                          'CONFIRMED',
+                          '2',
+                          Icons.check_circle_outline_rounded,
+                          Colors.green,
+                          cs,
+                        ),
                       ],
                     ),
                   ],
@@ -797,16 +1048,25 @@ class StaffAppPreviewMock extends StatelessWidget {
                 height: 28,
                 padding: const EdgeInsets.symmetric(horizontal: 8),
                 decoration: BoxDecoration(
-                  color: isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.05),
+                  color: isDark
+                      ? Colors.white10
+                      : Colors.black.withValues(alpha: 0.05),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.search_rounded, size: 12, color: cs.onSurface.withValues(alpha: 0.5)),
+                    Icon(
+                      Icons.search_rounded,
+                      size: 12,
+                      color: cs.onSurface.withValues(alpha: 0.5),
+                    ),
                     const SizedBox(width: 6),
                     Text(
                       'Search patients...',
-                      style: GoogleFonts.poppins(fontSize: 10, color: cs.onSurface.withValues(alpha: 0.5)),
+                      style: GoogleFonts.poppins(
+                        fontSize: 10,
+                        color: cs.onSurface.withValues(alpha: 0.5),
+                      ),
                     ),
                   ],
                 ),
@@ -818,9 +1078,27 @@ class StaffAppPreviewMock extends StatelessWidget {
               child: ListView(
                 padding: const EdgeInsets.all(10),
                 children: [
-                  _buildMockAptTile('John Doe', 'Adjustments', '10:00 AM', 'Confirmed', cs),
-                  _buildMockAptTile('Sarah Smith', 'Spine Scan', '11:30 AM', 'Pending', cs),
-                  _buildMockAptTile('Bob Johnson', 'Initial Consult', '02:00 PM', 'Confirmed', cs),
+                  _buildMockAptTile(
+                    'John Doe',
+                    'Adjustments',
+                    '10:00 AM',
+                    'Confirmed',
+                    cs,
+                  ),
+                  _buildMockAptTile(
+                    'Sarah Smith',
+                    'Spine Scan',
+                    '11:30 AM',
+                    'Pending',
+                    cs,
+                  ),
+                  _buildMockAptTile(
+                    'Bob Johnson',
+                    'Initial Consult',
+                    '02:00 PM',
+                    'Confirmed',
+                    cs,
+                  ),
                 ],
               ),
             ),
@@ -849,12 +1127,21 @@ class StaffAppPreviewMock extends StatelessWidget {
               const SizedBox(height: 10),
               Text(
                 'GONSTEAD CLINIC',
-                style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w900, color: cs.onSurface),
+                style: GoogleFonts.poppins(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w900,
+                  color: cs.onSurface,
+                ),
                 textAlign: TextAlign.center,
               ),
               Text(
                 'STAFF ACCESS PORTAL',
-                style: GoogleFonts.poppins(fontSize: 7, fontWeight: FontWeight.bold, color: cs.onSurface.withValues(alpha: 0.6), letterSpacing: 1),
+                style: GoogleFonts.poppins(
+                  fontSize: 7,
+                  fontWeight: FontWeight.bold,
+                  color: cs.onSurface.withValues(alpha: 0.6),
+                  letterSpacing: 1,
+                ),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 20),
@@ -875,7 +1162,11 @@ class StaffAppPreviewMock extends StatelessWidget {
                 ),
                 child: Text(
                   'Sign In as Staff',
-                  style: GoogleFonts.poppins(fontSize: 10, color: cs.onPrimary, fontWeight: FontWeight.bold),
+                  style: GoogleFonts.poppins(
+                    fontSize: 10,
+                    color: cs.onPrimary,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ],
@@ -889,33 +1180,39 @@ class StaffAppPreviewMock extends StatelessWidget {
       width: 32,
       height: 32,
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.04),
+        color: Colors.white.withValues(alpha: 0.04),
         shape: BoxShape.circle,
         border: Border.all(color: Colors.white12, width: 1),
       ),
       alignment: Alignment.center,
       child: Text(
         label,
-        style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+        style: GoogleFonts.poppins(
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+          color: Colors.white,
+        ),
       ),
     );
   }
 
   Widget _buildMockDivider() {
-    return Container(
-      height: 20,
-      width: 1,
-      color: Colors.grey.withOpacity(0.2),
-    );
+    return Container(height: 20, width: 1, color: Colors.grey.withValues(alpha: 0.2));
   }
 
-  Widget _buildMockStatItemVertical(String label, String value, IconData icon, Color color, ColorScheme cs) {
+  Widget _buildMockStatItemVertical(
+    String label,
+    String value,
+    IconData icon,
+    Color color,
+    ColorScheme cs,
+  ) {
     return Column(
       children: [
         Container(
           padding: const EdgeInsets.all(4),
           decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
+            color: color.withValues(alpha: 0.1),
             shape: BoxShape.circle,
           ),
           child: Icon(icon, color: color, size: 10),
@@ -923,17 +1220,31 @@ class StaffAppPreviewMock extends StatelessWidget {
         const SizedBox(height: 4),
         Text(
           value,
-          style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w900, color: cs.onSurface),
+          style: GoogleFonts.poppins(
+            fontSize: 11,
+            fontWeight: FontWeight.w900,
+            color: cs.onSurface,
+          ),
         ),
         Text(
           label,
-          style: GoogleFonts.poppins(fontSize: 6, fontWeight: FontWeight.bold, color: cs.onSurface.withOpacity(0.55)),
+          style: GoogleFonts.poppins(
+            fontSize: 6,
+            fontWeight: FontWeight.bold,
+            color: cs.onSurface.withValues(alpha: 0.55),
+          ),
         ),
       ],
     );
   }
 
-  Widget _buildMockAptTile(String name, String type, String time, String status, ColorScheme cs) {
+  Widget _buildMockAptTile(
+    String name,
+    String type,
+    String time,
+    String status,
+    ColorScheme cs,
+  ) {
     final statusColor = status == 'Confirmed' ? Colors.green : Colors.amber;
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
@@ -949,8 +1260,21 @@ class StaffAppPreviewMock extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(name, style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.bold, color: cs.onSurface)),
-              Text('$type • $time', style: GoogleFonts.poppins(fontSize: 8, color: cs.onSurface.withValues(alpha: 0.6))),
+              Text(
+                name,
+                style: GoogleFonts.poppins(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: cs.onSurface,
+                ),
+              ),
+              Text(
+                '$type • $time',
+                style: GoogleFonts.poppins(
+                  fontSize: 8,
+                  color: cs.onSurface.withValues(alpha: 0.6),
+                ),
+              ),
             ],
           ),
           Container(
@@ -961,7 +1285,11 @@ class StaffAppPreviewMock extends StatelessWidget {
             ),
             child: Text(
               status,
-              style: GoogleFonts.poppins(fontSize: 6, fontWeight: FontWeight.bold, color: statusColor),
+              style: GoogleFonts.poppins(
+                fontSize: 6,
+                fontWeight: FontWeight.bold,
+                color: statusColor,
+              ),
             ),
           ),
         ],
@@ -980,11 +1308,19 @@ class StaffAppPreviewMock extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: GoogleFonts.poppins(fontSize: 6, color: cs.onSurface.withValues(alpha: 0.5))),
-          Text(value, style: GoogleFonts.poppins(fontSize: 9, color: cs.onSurface)),
+          Text(
+            label,
+            style: GoogleFonts.poppins(
+              fontSize: 6,
+              color: cs.onSurface.withValues(alpha: 0.5),
+            ),
+          ),
+          Text(
+            value,
+            style: GoogleFonts.poppins(fontSize: 9, color: cs.onSurface),
+          ),
         ],
       ),
     );
   }
 }
-

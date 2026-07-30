@@ -5,7 +5,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
 import '../../../services/app_preferences.dart';
 import '../../../theme/app_theme.dart';
-import '../../shared/widgets/premium_card.dart';
 
 class StaffLockScreen extends ConsumerStatefulWidget {
   const StaffLockScreen({super.key});
@@ -14,7 +13,8 @@ class StaffLockScreen extends ConsumerStatefulWidget {
   ConsumerState<StaffLockScreen> createState() => _StaffLockScreenState();
 }
 
-class _StaffLockScreenState extends ConsumerState<StaffLockScreen> with TickerProviderStateMixin {
+class _StaffLockScreenState extends ConsumerState<StaffLockScreen>
+    with TickerProviderStateMixin {
   String _enteredPin = '';
   String _storedPin = '';
   String _staffEmail = '';
@@ -29,7 +29,10 @@ class _StaffLockScreenState extends ConsumerState<StaffLockScreen> with TickerPr
     super.initState();
     _loadData();
 
-    _shakeController = AnimationController(vsync: this, duration: const Duration(milliseconds: 500));
+    _shakeController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    );
     _shakeAnim = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _shakeController, curve: Curves.elasticIn),
     );
@@ -106,7 +109,10 @@ class _StaffLockScreenState extends ConsumerState<StaffLockScreen> with TickerPr
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(message, style: GoogleFonts.poppins(fontWeight: FontWeight.w500)),
+        content: Text(
+          message,
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w500),
+        ),
         backgroundColor: isError ? Colors.redAccent : AppColors.primary,
         behavior: SnackBarBehavior.floating,
       ),
@@ -152,11 +158,15 @@ class _StaffLockScreenState extends ConsumerState<StaffLockScreen> with TickerPr
                   width: 86,
                   height: 86,
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.06),
+                    color: Colors.white.withValues(alpha: 0.06),
                     shape: BoxShape.circle,
                     border: Border.all(color: AppColors.primary, width: 3),
                     boxShadow: [
-                      BoxShadow(color: AppColors.primary.withOpacity(0.3), blurRadius: 15, spreadRadius: 2),
+                      BoxShadow(
+                        color: AppColors.primary.withValues(alpha: 0.3),
+                        blurRadius: 15,
+                        spreadRadius: 2,
+                      ),
                     ],
                   ),
                   alignment: Alignment.center,
@@ -181,7 +191,10 @@ class _StaffLockScreenState extends ConsumerState<StaffLockScreen> with TickerPr
                 const SizedBox(height: 4),
                 Text(
                   'Enter 4-Digit PIN to unlock',
-                  style: GoogleFonts.poppins(fontSize: 12, color: Colors.white70),
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    color: Colors.white70,
+                  ),
                 ),
                 const SizedBox(height: 36),
 
@@ -190,7 +203,9 @@ class _StaffLockScreenState extends ConsumerState<StaffLockScreen> with TickerPr
                   animation: _shakeController,
                   builder: (context, child) {
                     final double offset = _isShaking
-                        ? (12 * (1.0 - _shakeAnim.value) * (identityHashCode(this) % 2 == 0 ? 1 : -1))
+                        ? (12 *
+                              (1.0 - _shakeAnim.value) *
+                              (identityHashCode(this) % 2 == 0 ? 1 : -1))
                         : 0.0;
                     return Transform.translate(
                       offset: Offset(offset, 0),
@@ -205,9 +220,15 @@ class _StaffLockScreenState extends ConsumerState<StaffLockScreen> with TickerPr
                             margin: const EdgeInsets.symmetric(horizontal: 12),
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
-                              color: filled ? (_isShaking ? Colors.redAccent : AppColors.primary) : Colors.transparent,
+                              color: filled
+                                  ? (_isShaking
+                                        ? Colors.redAccent
+                                        : AppColors.primary)
+                                  : Colors.transparent,
                               border: Border.all(
-                                color: _isShaking ? Colors.redAccent : AppColors.primary,
+                                color: _isShaking
+                                    ? Colors.redAccent
+                                    : AppColors.primary,
                                 width: 2.5,
                               ),
                             ),
@@ -227,17 +248,29 @@ class _StaffLockScreenState extends ConsumerState<StaffLockScreen> with TickerPr
                     children: [
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [_buildKey('1'), _buildKey('2'), _buildKey('3')],
+                        children: [
+                          _buildKey('1'),
+                          _buildKey('2'),
+                          _buildKey('3'),
+                        ],
                       ),
                       const SizedBox(height: 16),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [_buildKey('4'), _buildKey('5'), _buildKey('6')],
+                        children: [
+                          _buildKey('4'),
+                          _buildKey('5'),
+                          _buildKey('6'),
+                        ],
                       ),
                       const SizedBox(height: 16),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [_buildKey('7'), _buildKey('8'), _buildKey('9')],
+                        children: [
+                          _buildKey('7'),
+                          _buildKey('8'),
+                          _buildKey('9'),
+                        ],
                       ),
                       const SizedBox(height: 16),
                       Row(
@@ -257,7 +290,11 @@ class _StaffLockScreenState extends ConsumerState<StaffLockScreen> with TickerPr
                 // Return/Logout option
                 TextButton.icon(
                   onPressed: _logout,
-                  icon: const Icon(Icons.logout_rounded, color: Colors.white60, size: 16),
+                  icon: const Icon(
+                    Icons.logout_rounded,
+                    color: Colors.white60,
+                    size: 16,
+                  ),
                   label: Text(
                     'Logout / Switch Account',
                     style: GoogleFonts.poppins(
@@ -283,14 +320,18 @@ class _StaffLockScreenState extends ConsumerState<StaffLockScreen> with TickerPr
         width: 68,
         height: 68,
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.04),
+          color: Colors.white.withValues(alpha: 0.04),
           shape: BoxShape.circle,
           border: Border.all(color: Colors.white12, width: 1.5),
         ),
         alignment: Alignment.center,
         child: Text(
           label,
-          style: GoogleFonts.poppins(fontSize: 24, fontWeight: FontWeight.w700, color: Colors.white),
+          style: GoogleFonts.poppins(
+            fontSize: 24,
+            fontWeight: FontWeight.w700,
+            color: Colors.white,
+          ),
         ),
       ),
     );
@@ -302,11 +343,13 @@ class _StaffLockScreenState extends ConsumerState<StaffLockScreen> with TickerPr
       child: Container(
         width: 68,
         height: 68,
-        decoration: const BoxDecoration(
-          shape: BoxShape.circle,
-        ),
+        decoration: const BoxDecoration(shape: BoxShape.circle),
         alignment: Alignment.center,
-        child: const Icon(Icons.backspace_outlined, color: Colors.white70, size: 24),
+        child: const Icon(
+          Icons.backspace_outlined,
+          color: Colors.white70,
+          size: 24,
+        ),
       ),
     );
   }

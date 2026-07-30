@@ -21,7 +21,8 @@ class PaymentRepository {
 
   bool get _useFirestore {
     try {
-      return Firebase.apps.isNotEmpty && FirebaseAuth.instance.currentUser != null;
+      return Firebase.apps.isNotEmpty &&
+          FirebaseAuth.instance.currentUser != null;
     } catch (_) {
       return false;
     }
@@ -29,7 +30,9 @@ class PaymentRepository {
 
   Future<List<Payment>> loadPayments() async {
     final now = DateTime.now();
-    if (_cachedPayments != null && _cachedAt != null && now.difference(_cachedAt!) < _cacheTtl) {
+    if (_cachedPayments != null &&
+        _cachedAt != null &&
+        now.difference(_cachedAt!) < _cacheTtl) {
       return List<Payment>.unmodifiable(_cachedPayments!);
     }
 
@@ -59,7 +62,9 @@ class PaymentRepository {
 
     final decoded = jsonDecode(raw) as List<dynamic>;
     final payments = decoded
-        .map((entry) => Payment.fromJson(Map<String, dynamic>.from(entry as Map)))
+        .map(
+          (entry) => Payment.fromJson(Map<String, dynamic>.from(entry as Map)),
+        )
         .toList(growable: false);
     _cachedPayments = payments;
     _cachedAt = now;

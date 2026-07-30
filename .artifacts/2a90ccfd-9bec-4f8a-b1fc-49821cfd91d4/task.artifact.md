@@ -1,0 +1,14 @@
+- `[x]` Add `connectivity_plus` to `pubspec.yaml`
+- `[x]` Update `AndroidManifest.xml` for deep-linking (`gct-clinic://`) and exact alarms
+- `[x]` Implement connectivity listener and restoration logic in `NotificationService`
+- `[x]` Update `AppointmentRepository.saveAppointment` to return status
+- `[x]` Fix Payment Gateway Loophole in `BookingScreen` (Save `pending` first)
+- `[x]` Implement `/payment-callback` route in `AppRouter`
+- `[x]` Add offline/restoration toasts in `BookingScreen`
+- `[x]` Implement Global Back Button Interception (`PopScope`)
+- `[x]` Add 'Pay Now' retry button for pending online payments
+- `[x]` Comprehensive Memory Optimization Sweep
+    - `[x]` Explicitly dispose all controllers in `StatefulWidget`s
+    - `[x]` Implement `cacheWidth`/`cacheHeight` for all images
+    - `[x]` Replace `print` with `debugPrint` and add `const` modifiers
+- `[x]` Final project formatting and cleanup

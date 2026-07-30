@@ -17,20 +17,27 @@ import '../../theme/app_theme.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../services/repository_providers.dart';
 import '../../services/notification_service.dart';
+import '../utils/image_service.dart';
 
 class AppointmentDetailScreen extends ConsumerStatefulWidget {
   const AppointmentDetailScreen({super.key, required this.id});
   final String id;
 
   @override
-  ConsumerState<AppointmentDetailScreen> createState() => _AppointmentDetailScreenState();
+  ConsumerState<AppointmentDetailScreen> createState() =>
+      _AppointmentDetailScreenState();
 }
 
-class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScreen> {
+class _AppointmentDetailScreenState
+    extends ConsumerState<AppointmentDetailScreen> {
   AppointmentRepository get _repo => ref.read(appointmentRepositoryProvider);
   final _noteController = TextEditingController();
 
-  Future<void> _launchWhatsApp(String phone, String patientName, String dateStr) async {
+  Future<void> _launchWhatsApp(
+    String phone,
+    String patientName,
+    String dateStr,
+  ) async {
     final cleanPhone = phone.replaceAll(RegExp(r'\s+|-|\(|\)'), '');
     if (cleanPhone.isEmpty) {
       if (mounted) {
@@ -41,15 +48,17 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
       return;
     }
     final message = Uri.encodeComponent(
-        "Hello $patientName, this is a reminder for your chiropractic appointment scheduled on $dateStr at Gonstead Chiropractic Treatment. Please let us know if you need to reschedule. Thank you!");
-    
+      "Hello $patientName, this is a reminder for your chiropractic appointment scheduled on $dateStr at Gonstead Chiropractic Treatment. Please let us know if you need to reschedule. Thank you!",
+    );
+
     String rawDigits = cleanPhone.replaceAll('+', '');
     if (rawDigits.startsWith('0')) {
       rawDigits = '92${rawDigits.substring(1)}';
     }
 
     final nativeUrl = "whatsapp://send?phone=$rawDigits&text=$message";
-    final webUrl = "https://api.whatsapp.com/send?phone=$rawDigits&text=$message";
+    final webUrl =
+        "https://api.whatsapp.com/send?phone=$rawDigits&text=$message";
     final shortUrl = "https://wa.me/$rawDigits?text=$message";
 
     try {
@@ -70,7 +79,11 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
       debugPrint('WhatsApp launch failed: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not open WhatsApp. Please check if WhatsApp is installed.')),
+          const SnackBar(
+            content: Text(
+              'Could not open WhatsApp. Please check if WhatsApp is installed.',
+            ),
+          ),
         );
       }
     }
@@ -81,7 +94,9 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
     if (cleanPhone.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No phone number recorded for patient.')),
+          const SnackBar(
+            content: Text('No phone number recorded for patient.'),
+          ),
         );
       }
       return;
@@ -102,11 +117,12 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
       }
     }
   }
+
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
   final _treatmentController = TextEditingController();
-  
+
   // Clinical report field controllers
   final _bpController = TextEditingController();
   final _pulseController = TextEditingController();
@@ -152,6 +168,16 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
     _durationController.dispose();
     _techniqueController.dispose();
     _improvementController.dispose();
+    _nameController.dispose();
+    _phoneController.dispose();
+    _emailController.dispose();
+    _treatmentController.dispose();
+    _bpController.dispose();
+    _pulseController.dispose();
+    _segmentsController.dispose();
+    _exercisesController.dispose();
+    _followUpController.dispose();
+    _professionController.dispose();
     super.dispose();
   }
 
@@ -167,7 +193,7 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
       _treatmentController.text = apt?.treatmentType ?? '';
       _statusValue = apt?.status ?? 'Pending';
       _scheduledAt = apt?.scheduledAt;
-      
+
       // Initialize clinical assessment fields
       _painLevel = apt?.painLevel?.toDouble() ?? 0.0;
       _bpController.text = apt?.bloodPressure ?? '';
@@ -177,13 +203,15 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
       _followUpController.text = apt?.nextFollowUp ?? '';
       _professionController.text = apt?.patientProfession ?? '';
       _durationController.text = apt?.durationMinutes.toString() ?? '40';
-      
+
       _isLoading = false;
 
       // Init new fields
       _techniqueController.text = apt?.adjustmentTechnique ?? '';
       _improvementController.text = apt?.patientImprovement ?? '';
-      _posturalPhotoPath = apt?.posturalPhotoPath?.isNotEmpty == true ? apt!.posturalPhotoPath : null;
+      _posturalPhotoPath = apt?.posturalPhotoPath.isNotEmpty == true
+          ? apt!.posturalPhotoPath
+          : null;
     });
   }
 
@@ -199,10 +227,19 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
           builder: (ctx) => AlertDialog(
             title: Row(
               children: [
-                const Icon(Icons.event_available_rounded, color: AppColors.primary),
+                const Icon(
+                  Icons.event_available_rounded,
+                  color: AppColors.primary,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text('Schedule Next Session', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 18)),
+                  child: Text(
+                    'Schedule Next Session',
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 18,
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -234,7 +271,8 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
             'treatmentPlanTotalSessions': totalSessions,
             'sessionNumber': currentSession + 1,
             'durationMinutes': appointment.durationMinutes,
-            'visitReason': 'Follow-up treatment session ${currentSession + 1} of $totalSessions.',
+            'visitReason':
+                'Follow-up treatment session ${currentSession + 1} of $totalSessions.',
           };
           context.push('/booking', extra: extraData);
         }
@@ -258,7 +296,9 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
       prescribedExercises: _exercisesController.text.trim(),
       nextFollowUp: _followUpController.text.trim(),
       patientProfession: _professionController.text.trim(),
-      durationMinutes: int.tryParse(_durationController.text.trim()) ?? _appointment!.durationMinutes,
+      durationMinutes:
+          int.tryParse(_durationController.text.trim()) ??
+          _appointment!.durationMinutes,
       adjustmentTechnique: _techniqueController.text.trim(),
       patientImprovement: _improvementController.text.trim(),
       posturalPhotoPath: _posturalPhotoPath ?? '',
@@ -269,11 +309,16 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
     // Manage scheduled reminder notifications
     try {
       // Cancel previous scheduled notifications if date/time changed or no longer active
-      if (updated.scheduledAt != _appointment!.scheduledAt || updated.status.toLowerCase() != 'confirmed') {
-        await NotificationService().cancelNotification(NotificationService.getReminderId(_appointment!.id));
-        await NotificationService().cancelNotification(NotificationService.getStartId(_appointment!.id));
+      if (updated.scheduledAt != _appointment!.scheduledAt ||
+          updated.status.toLowerCase() != 'confirmed') {
+        await NotificationService().cancelNotification(
+          NotificationService.getReminderId(_appointment!.id),
+        );
+        await NotificationService().cancelNotification(
+          NotificationService.getStartId(_appointment!.id),
+        );
       }
-      
+
       // Re-schedule reminder and appointment time notifications
       await NotificationService().scheduleAppointmentReminders(updated);
 
@@ -288,23 +333,36 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
     }
 
     if (!mounted) return;
-    setState(() { _appointment = updated; _isEditing = false; });
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Appointment updated')));
+    setState(() {
+      _appointment = updated;
+      _isEditing = false;
+    });
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Appointment updated')));
     await _checkCompletedAndPrompt(updated);
   }
 
   Future<void> _saveNote() async {
     if (_appointment == null) return;
-    final updated = _appointment!.copyWith(patientNote: _noteController.text.trim(), updatedAt: DateTime.now());
+    final updated = _appointment!.copyWith(
+      patientNote: _noteController.text.trim(),
+      updatedAt: DateTime.now(),
+    );
     await _repo.updateAppointment(updated);
     if (!mounted) return;
     setState(() => _appointment = updated);
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Note saved')));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Note saved')));
   }
 
   Future<void> _updateStatus(String newStatus) async {
     if (_appointment == null) return;
-    final updated = _appointment!.copyWith(status: newStatus, updatedAt: DateTime.now());
+    final updated = _appointment!.copyWith(
+      status: newStatus,
+      updatedAt: DateTime.now(),
+    );
     await _repo.updateAppointment(updated);
 
     try {
@@ -312,8 +370,12 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
       if (newStatus.toLowerCase() == 'cancelled' ||
           newStatus.toLowerCase() == 'completed' ||
           newStatus.toLowerCase() == 'no show') {
-        await NotificationService().cancelNotification(NotificationService.getReminderId(updated.id));
-        await NotificationService().cancelNotification(NotificationService.getStartId(updated.id));
+        await NotificationService().cancelNotification(
+          NotificationService.getReminderId(updated.id),
+        );
+        await NotificationService().cancelNotification(
+          NotificationService.getStartId(updated.id),
+        );
       } else {
         // Reschedule notifications if changed back to Confirmed/Pending
         await NotificationService().scheduleAppointmentReminders(updated);
@@ -331,7 +393,9 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
 
     if (!mounted) return;
     setState(() => _appointment = updated);
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Status → $newStatus')));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('Status → $newStatus')));
     await _checkCompletedAndPrompt(updated);
   }
 
@@ -339,23 +403,42 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Delete Appointment', style: GoogleFonts.poppins(fontWeight: FontWeight.w700)),
-        content: Text('This will permanently delete this appointment.', style: GoogleFonts.poppins()),
+        title: Text(
+          'Delete Appointment',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w700),
+        ),
+        content: Text(
+          'This will permanently delete this appointment.',
+          style: GoogleFonts.poppins(),
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text('Delete', style: TextStyle(color: Theme.of(ctx).colorScheme.error))),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(
+              'Delete',
+              style: TextStyle(color: Theme.of(ctx).colorScheme.error),
+            ),
+          ),
         ],
       ),
     );
     if (confirmed != true || _appointment == null) return;
-    
+
     final oldAptId = _appointment!.id;
     await _repo.deleteAppointment(oldAptId);
 
     try {
       // Cancel scheduled reminder and start notifications
-      await NotificationService().cancelNotification(NotificationService.getReminderId(oldAptId));
-      await NotificationService().cancelNotification(NotificationService.getStartId(oldAptId));
+      await NotificationService().cancelNotification(
+        NotificationService.getReminderId(oldAptId),
+      );
+      await NotificationService().cancelNotification(
+        NotificationService.getStartId(oldAptId),
+      );
       // Show instant notification
       await NotificationService().showLocalNotification(
         'Appointment Deleted 🗑️',
@@ -378,9 +461,20 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
       lastDate: DateTime.now().add(const Duration(days: 365)),
     );
     if (date == null || !mounted) return;
-    final time = await showTimePicker(context: context, initialTime: TimeOfDay.fromDateTime(_scheduledAt ?? DateTime.now()));
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(_scheduledAt ?? DateTime.now()),
+    );
     if (time == null) return;
-    setState(() => _scheduledAt = DateTime(date.year, date.month, date.day, time.hour, time.minute));
+    setState(
+      () => _scheduledAt = DateTime(
+        date.year,
+        date.month,
+        date.day,
+        time.hour,
+        time.minute,
+      ),
+    );
   }
 
   Future<void> _generatePdf() async {
@@ -405,13 +499,14 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
     if (_appointment == null) return;
     try {
       final allApts = await _repo.loadAppointments();
-      
+
       // Find all sessions for this patient
       final patientName = _appointment!.patientName.toLowerCase();
       final patientPhone = _appointment!.phoneNumber;
       final patientSessions = allApts.where((a) {
         final nameMatch = a.patientName.toLowerCase() == patientName;
-        final phoneMatch = patientPhone.isNotEmpty && a.phoneNumber == patientPhone;
+        final phoneMatch =
+            patientPhone.isNotEmpty && a.phoneNumber == patientPhone;
         return nameMatch || phoneMatch;
       }).toList();
 
@@ -426,7 +521,9 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
       if (patientSessions.isEmpty) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('No sessions found for this patient.')),
+            const SnackBar(
+              content: Text('No sessions found for this patient.'),
+            ),
           );
         }
         return;
@@ -441,7 +538,9 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
       debugPrint('Error generating all sessions PDF: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to generate comprehensive report: $e')),
+          SnackBar(
+            content: Text('Failed to generate comprehensive report: $e'),
+          ),
         );
       }
     }
@@ -449,12 +548,28 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) return Scaffold(body: Center(child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary)));
+    if (_isLoading) {
+      return Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(
+            color: Theme.of(context).colorScheme.primary,
+          ),
+        ),
+      );
+    }
     final apt = _appointment;
-    if (apt == null) return AppShellScaffold(title: 'Appointment', currentRoute: '/dashboard', body: const Center(child: Text('Not found')));
+    if (apt == null) {
+      return AppShellScaffold(
+        title: 'Appointment',
+        currentRoute: '/dashboard',
+        body: const Center(child: Text('Not found')),
+      );
+    }
 
     final cs = Theme.of(context).colorScheme;
-    final dateText = apt.scheduledAt != null ? DateFormat('EEEE, d MMM y  •  hh:mm a').format(apt.scheduledAt!) : apt.time;
+    final dateText = apt.scheduledAt != null
+        ? DateFormat('EEEE, d MMM y  •  hh:mm a').format(apt.scheduledAt!)
+        : apt.time;
     final sColor = statusColor(apt.status);
     final sBg = statusBgColor(apt.status);
 
@@ -462,9 +577,15 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
       title: 'Appointment Detail',
       currentRoute: '/dashboard',
       actions: [
-        IconButton(icon: const Icon(Icons.picture_as_pdf_rounded), onPressed: _generatePdf, tooltip: 'PDF'),
+        IconButton(
+          icon: const Icon(Icons.picture_as_pdf_rounded),
+          onPressed: _generatePdf,
+          tooltip: 'PDF',
+        ),
         PopupMenuButton<String>(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
           onSelected: (v) async {
             if (v == 'edit') setState(() => _isEditing = true);
             if (v == 'confirm') await _updateStatus('Confirmed');
@@ -475,12 +596,27 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
           },
           itemBuilder: (_) => [
             const PopupMenuItem(value: 'edit', child: Text('Edit')),
-            const PopupMenuItem(value: 'confirm', child: Text('Mark Confirmed')),
-            const PopupMenuItem(value: 'complete', child: Text('Mark Completed')),
-            const PopupMenuItem(value: 'cancel', child: Text('Cancel Appointment')),
+            const PopupMenuItem(
+              value: 'confirm',
+              child: Text('Mark Confirmed'),
+            ),
+            const PopupMenuItem(
+              value: 'complete',
+              child: Text('Mark Completed'),
+            ),
+            const PopupMenuItem(
+              value: 'cancel',
+              child: Text('Cancel Appointment'),
+            ),
             const PopupMenuItem(value: 'no_show', child: Text('Mark No Show')),
             const PopupMenuDivider(),
-            PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: Theme.of(context).colorScheme.error))),
+            PopupMenuItem(
+              value: 'delete',
+              child: Text(
+                'Delete',
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ),
           ],
         ),
       ],
@@ -494,12 +630,16 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
           // Main card
           PremiumCard(
             padding: const EdgeInsets.all(20),
-            child: _isEditing ? _buildEditForm() : _buildViewCard(apt, cs, dateText, sColor, sBg),
+            child: _isEditing
+                ? _buildEditForm()
+                : _buildViewCard(apt, cs, dateText, sColor, sBg),
           ),
           const SizedBox(height: 14),
 
           // Treatment Plan Progress Card
-          if (!_isEditing && apt.treatmentPlanTotalSessions != null && apt.treatmentPlanTotalSessions! > 0) ...[
+          if (!_isEditing &&
+              apt.treatmentPlanTotalSessions != null &&
+              apt.treatmentPlanTotalSessions! > 0) ...[
             PremiumCard(
               padding: const EdgeInsets.all(20),
               child: Column(
@@ -514,26 +654,39 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
                           children: [
                             Text(
                               'Active Care Plan: ${apt.treatmentPlanTotalSessions} Sessions',
-                              style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 14),
+                              style: GoogleFonts.poppins(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 14,
+                              ),
                               overflow: TextOverflow.ellipsis,
                             ),
                             Text(
                               'Session Number: Session ${apt.sessionNumber ?? 1}',
-                              style: GoogleFonts.poppins(fontSize: 12, color: cs.onSurface.withOpacity(0.55)),
+                              style: GoogleFonts.poppins(
+                                fontSize: 12,
+                                color: cs.onSurface.withValues(alpha: 0.55),
+                              ),
                             ),
                           ],
                         ),
                       ),
                       const SizedBox(width: 8),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
-                          color: cs.primary.withOpacity(0.1),
+                          color: cs.primary.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(
                           '${apt.treatmentPlanTotalSessions! > 0 ? (((apt.sessionNumber ?? 1) / apt.treatmentPlanTotalSessions!) * 100).round() : 0}% Progress',
-                          style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600, color: cs.primary),
+                          style: GoogleFonts.poppins(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: cs.primary,
+                          ),
                         ),
                       ),
                     ],
@@ -542,9 +695,12 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
                   ClipRRect(
                     borderRadius: BorderRadius.circular(6),
                     child: LinearProgressIndicator(
-                      value: apt.treatmentPlanTotalSessions! > 0 ? (apt.sessionNumber ?? 1) / apt.treatmentPlanTotalSessions! : 0.0,
+                      value: apt.treatmentPlanTotalSessions! > 0
+                          ? (apt.sessionNumber ?? 1) /
+                                apt.treatmentPlanTotalSessions!
+                          : 0.0,
                       minHeight: 10,
-                      backgroundColor: cs.primary.withOpacity(0.1),
+                      backgroundColor: cs.primary.withValues(alpha: 0.1),
                       color: cs.primary,
                     ),
                   ),
@@ -554,11 +710,19 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
                     children: [
                       Text(
                         'Completed: ${apt.sessionNumber ?? 1} sessions',
-                        style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w500, color: cs.onSurface.withOpacity(0.65)),
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: cs.onSurface.withValues(alpha: 0.65),
+                        ),
                       ),
                       Text(
                         'Remaining: ${(apt.treatmentPlanTotalSessions! - (apt.sessionNumber ?? 1)).clamp(0, apt.treatmentPlanTotalSessions!)} sessions',
-                        style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w500, color: cs.onSurface.withOpacity(0.65)),
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: cs.onSurface.withValues(alpha: 0.65),
+                        ),
                       ),
                     ],
                   ),
@@ -570,32 +734,73 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
 
           // Quick action buttons
           if (!_isEditing) ...[
-            Row(children: [
-              _QuickBtn(icon: Icons.check_circle_outline_rounded, label: 'Confirm', color: AppColors.statusConfirmed, onTap: () => _updateStatus('Confirmed')),
-              const SizedBox(width: 10),
-              _QuickBtn(icon: Icons.task_alt_rounded, label: 'Complete', color: AppColors.statusCompleted, onTap: () => _updateStatus('Completed')),
-            ]),
+            Row(
+              children: [
+                _QuickBtn(
+                  icon: Icons.check_circle_outline_rounded,
+                  label: 'Confirm',
+                  color: AppColors.statusConfirmed,
+                  onTap: () => _updateStatus('Confirmed'),
+                ),
+                const SizedBox(width: 10),
+                _QuickBtn(
+                  icon: Icons.task_alt_rounded,
+                  label: 'Complete',
+                  color: AppColors.statusCompleted,
+                  onTap: () => _updateStatus('Completed'),
+                ),
+              ],
+            ),
             const SizedBox(height: 10),
-            Row(children: [
-              _QuickBtn(icon: Icons.person_off_rounded, label: 'No Show', color: const Color(0xFF8B5CF6), onTap: () => _updateStatus('No Show')),
-              const SizedBox(width: 10),
-              _QuickBtn(icon: Icons.picture_as_pdf_rounded, label: 'PDF Report', color: cs.primary, onTap: _generatePdf),
-            ]),
+            Row(
+              children: [
+                _QuickBtn(
+                  icon: Icons.person_off_rounded,
+                  label: 'No Show',
+                  color: const Color(0xFF8B5CF6),
+                  onTap: () => _updateStatus('No Show'),
+                ),
+                const SizedBox(width: 10),
+                _QuickBtn(
+                  icon: Icons.picture_as_pdf_rounded,
+                  label: 'PDF Report',
+                  color: cs.primary,
+                  onTap: _generatePdf,
+                ),
+              ],
+            ),
             const SizedBox(height: 10),
-            Row(children: [
-              _QuickBtn(icon: Icons.summarize_rounded, label: 'All Sessions PDF', color: const Color(0xFFD97706), onTap: _generateAllSessionsPdf),
-              const SizedBox(width: 10),
-              _QuickBtn(
-                icon: Icons.history_rounded,
-                label: 'Patient History',
-                color: cs.primary,
-                onTap: () {
-                  context.push('/patient-history?name=${Uri.encodeComponent(apt.patientName)}&phone=${Uri.encodeComponent(apt.phoneNumber)}').then((_) => _load());
-                },
-              ),
-            ]),
+            Row(
+              children: [
+                _QuickBtn(
+                  icon: Icons.summarize_rounded,
+                  label: 'All Sessions PDF',
+                  color: const Color(0xFFD97706),
+                  onTap: _generateAllSessionsPdf,
+                ),
+                const SizedBox(width: 10),
+                _QuickBtn(
+                  icon: Icons.history_rounded,
+                  label: 'Patient History',
+                  color: cs.primary,
+                  onTap: () {
+                    context
+                        .push(
+                          '/patient-history?name=${Uri.encodeComponent(apt.patientName)}&phone=${Uri.encodeComponent(apt.phoneNumber)}',
+                        )
+                        .then((_) => _load());
+                  },
+                ),
+              ],
+            ),
             const SizedBox(height: 16),
-            Text('Clinical Assessment & Treatment', style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 15)),
+            Text(
+              'Clinical Assessment & Treatment',
+              style: GoogleFonts.poppins(
+                fontWeight: FontWeight.w700,
+                fontSize: 15,
+              ),
+            ),
             const SizedBox(height: 10),
             PremiumCard(
               padding: const EdgeInsets.all(18),
@@ -609,7 +814,9 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
                         child: _buildClinicalIndicator(
                           icon: Icons.favorite_rounded,
                           label: 'Pulse Rate',
-                          value: apt.pulseRate != null ? '${apt.pulseRate} bpm' : 'Not recorded',
+                          value: apt.pulseRate != null
+                              ? '${apt.pulseRate} bpm'
+                              : 'Not recorded',
                           color: Colors.redAccent,
                         ),
                       ),
@@ -617,7 +824,9 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
                         child: _buildClinicalIndicator(
                           icon: Icons.speed_rounded,
                           label: 'Blood Pressure',
-                          value: apt.bloodPressure.isNotEmpty ? apt.bloodPressure : 'Not recorded',
+                          value: apt.bloodPressure.isNotEmpty
+                              ? apt.bloodPressure
+                              : 'Not recorded',
                           color: Colors.blueAccent,
                         ),
                       ),
@@ -625,7 +834,14 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
                   ),
                   const SizedBox(height: 16),
                   // Pain score visual indicator
-                  Text('Pain Severity (VAS)', style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w500, color: cs.onSurface.withValues(alpha: 0.5))),
+                  Text(
+                    'Pain Severity (VAS)',
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: cs.onSurface.withValues(alpha: 0.5),
+                    ),
+                  ),
                   const SizedBox(height: 6),
                   Row(
                     children: [
@@ -635,7 +851,7 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
                           child: LinearProgressIndicator(
                             value: (apt.painLevel ?? 0) / 10,
                             minHeight: 8,
-                            backgroundColor: cs.surfaceVariant,
+                            backgroundColor: cs.surfaceContainerHighest,
                             color: _getPainColor(apt.painLevel ?? 0),
                           ),
                         ),
@@ -643,7 +859,11 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
                       const SizedBox(width: 12),
                       Text(
                         '${apt.painLevel ?? 0}/10',
-                        style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 13, color: _getPainColor(apt.painLevel ?? 0)),
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                          color: _getPainColor(apt.painLevel ?? 0),
+                        ),
                       ),
                     ],
                   ),
@@ -668,24 +888,36 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
                   _DetailRow(
                     icon: Icons.accessibility_new_rounded,
                     label: 'Adjustments',
-                    value: apt.adjustedSegments.isNotEmpty ? apt.adjustedSegments : 'No segments recorded',
+                    value: apt.adjustedSegments.isNotEmpty
+                        ? apt.adjustedSegments
+                        : 'No segments recorded',
                   ),
                   // Prescribed Exercises
                   _DetailRow(
                     icon: Icons.directions_run_rounded,
                     label: 'Exercises',
-                    value: apt.prescribedExercises.isNotEmpty ? apt.prescribedExercises : 'None prescribed',
+                    value: apt.prescribedExercises.isNotEmpty
+                        ? apt.prescribedExercises
+                        : 'None prescribed',
                   ),
                   // Follow up
                   _DetailRow(
                     icon: Icons.next_plan_outlined,
                     label: 'Follow-up',
-                    value: apt.nextFollowUp.isNotEmpty ? apt.nextFollowUp : 'As needed',
+                    value: apt.nextFollowUp.isNotEmpty
+                        ? apt.nextFollowUp
+                        : 'As needed',
                   ),
                   // Posture Photo
                   if (apt.posturalPhotoPath.isNotEmpty) ...[
                     const SizedBox(height: 10),
-                    Text('Posture Photo', style: GoogleFonts.poppins(fontSize: 11, color: cs.onSurface.withValues(alpha: 0.5))),
+                    Text(
+                      'Posture Photo',
+                      style: GoogleFonts.poppins(
+                        fontSize: 11,
+                        color: cs.onSurface.withValues(alpha: 0.5),
+                      ),
+                    ),
                     const SizedBox(height: 6),
                     ClipRRect(
                       borderRadius: BorderRadius.circular(12),
@@ -694,13 +926,19 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
                         height: 180,
                         width: double.infinity,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Container(
+                        cacheWidth: 800,
+                        errorBuilder: (_, _, _) => Container(
                           height: 60,
                           decoration: BoxDecoration(
-                            color: cs.surfaceVariant,
+                            color: cs.surfaceContainerHighest,
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          child: Center(child: Text('Photo not available', style: GoogleFonts.poppins(fontSize: 12))),
+                          child: Center(
+                            child: Text(
+                              'Photo not available',
+                              style: GoogleFonts.poppins(fontSize: 12),
+                            ),
+                          ),
                         ),
                       ),
                     ),
@@ -711,7 +949,13 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
           ],
 
           const SizedBox(height: 16),
-          Text('Clinical Note', style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 15)),
+          Text(
+            'Clinical Note',
+            style: GoogleFonts.poppins(
+              fontWeight: FontWeight.w700,
+              fontSize: 15,
+            ),
+          ),
           const SizedBox(height: 10),
           PremiumCard(
             padding: const EdgeInsets.all(18),
@@ -721,14 +965,32 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
                 TextFormField(
                   controller: _noteController,
                   maxLines: 5,
-                  decoration: const InputDecoration(hintText: 'Add clinical note…', border: InputBorder.none, enabledBorder: InputBorder.none, focusedBorder: InputBorder.none, filled: false),
+                  decoration: const InputDecoration(
+                    hintText: 'Add clinical note…',
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    filled: false,
+                  ),
                 ),
                 const SizedBox(height: 10),
-                Row(children: [
-                  Expanded(child: OutlinedButton(onPressed: _saveNote, child: const Text('Save Note'))),
-                  const SizedBox(width: 12),
-                  Expanded(child: ElevatedButton(onPressed: _generatePdf, child: const Text('Report'))),
-                ]),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: _saveNote,
+                        child: const Text('Save Note'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: _generatePdf,
+                        child: const Text('Report'),
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -738,7 +1000,13 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
     );
   }
 
-  Widget _buildViewCard(Appointment apt, ColorScheme cs, String dateText, Color sColor, Color sBg) {
+  Widget _buildViewCard(
+    Appointment apt,
+    ColorScheme cs,
+    String dateText,
+    Color sColor,
+    Color sBg,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -750,44 +1018,107 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
             decoration: BoxDecoration(
               color: const Color(0xFFEF4444).withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.25)),
+              border: Border.all(
+                color: const Color(0xFFEF4444).withValues(alpha: 0.25),
+              ),
             ),
             child: Row(
               children: [
-                const Icon(Icons.warning_amber_rounded, color: Color(0xFFEF4444), size: 18),
+                const Icon(
+                  Icons.warning_amber_rounded,
+                  color: Color(0xFFEF4444),
+                  size: 18,
+                ),
                 const SizedBox(width: 8),
                 Text(
                   'CRITICAL EMERGENCY APPOINTMENT',
-                  style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w800, color: const Color(0xFFEF4444), letterSpacing: 0.5),
+                  style: GoogleFonts.poppins(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    color: const Color(0xFFEF4444),
+                    letterSpacing: 0.5,
+                  ),
                 ),
               ],
             ),
           ),
         ],
-        Row(children: [
-          CircleAvatar(
-            radius: 26,
-            backgroundColor: cs.primary.withValues(alpha: 0.12),
-            child: Text(apt.patientName.isNotEmpty ? apt.patientName[0].toUpperCase() : '?', style: GoogleFonts.poppins(fontSize: 22, fontWeight: FontWeight.w700, color: cs.primary)),
-          ),
-          const SizedBox(width: 14),
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(apt.patientName, style: GoogleFonts.poppins(fontWeight: FontWeight.w800, fontSize: 17)),
-            const SizedBox(height: 4),
-            Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4), decoration: BoxDecoration(color: sBg, borderRadius: BorderRadius.circular(20)), child: Text(apt.status, style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600, color: sColor))),
-          ])),
-        ]),
+        Row(
+          children: [
+            CircleAvatar(
+              radius: 26,
+              backgroundColor: cs.primary.withValues(alpha: 0.12),
+              child: Text(
+                apt.patientName.isNotEmpty
+                    ? apt.patientName[0].toUpperCase()
+                    : '?',
+                style: GoogleFonts.poppins(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                  color: cs.primary,
+                ),
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    apt.patientName,
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 17,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: sBg,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      apt.status,
+                      style: GoogleFonts.poppins(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: sColor,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
         const SizedBox(height: 16),
         const Divider(),
         const SizedBox(height: 12),
-        _DetailRow(icon: Icons.calendar_today_rounded, label: 'Date', value: dateText),
-        _DetailRow(icon: Icons.timer_outlined, label: 'Duration', value: '${apt.durationMinutes} minutes'),
-        _DetailRow(icon: Icons.medical_services_outlined, label: 'Treatment', value: apt.treatmentType),
+        _DetailRow(
+          icon: Icons.calendar_today_rounded,
+          label: 'Date',
+          value: dateText,
+        ),
+        _DetailRow(
+          icon: Icons.timer_outlined,
+          label: 'Duration',
+          value: '${apt.durationMinutes} minutes',
+        ),
+        _DetailRow(
+          icon: Icons.medical_services_outlined,
+          label: 'Treatment',
+          value: apt.treatmentType,
+        ),
         if (apt.dateOfBirth != null)
           _DetailRow(
             icon: Icons.cake_rounded,
             label: 'DOB / Age',
-            value: '${DateFormat('d MMM y').format(apt.dateOfBirth!)}  •  ${DateTime.now().year - apt.dateOfBirth!.year} yrs',
+            value:
+                '${DateFormat('d MMM y').format(apt.dateOfBirth!)}  •  ${DateTime.now().year - apt.dateOfBirth!.year} yrs',
           ),
         if (apt.phoneNumber.isNotEmpty)
           _DetailRow(
@@ -804,7 +1135,7 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
                   style: IconButton.styleFrom(
                     padding: const EdgeInsets.all(4),
                     minimumSize: Size.zero,
-                    backgroundColor: cs.primary.withOpacity(0.08),
+                    backgroundColor: cs.primary.withValues(alpha: 0.08),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -815,22 +1146,40 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
                     apt.phoneNumber,
                     apt.patientName,
                     apt.scheduledAt != null
-                        ? DateFormat('EEEE, d MMM y • hh:mm a').format(apt.scheduledAt!)
+                        ? DateFormat(
+                            'EEEE, d MMM y • hh:mm a',
+                          ).format(apt.scheduledAt!)
                         : apt.time,
                   ),
                   style: IconButton.styleFrom(
                     padding: const EdgeInsets.all(4),
                     minimumSize: Size.zero,
-                    backgroundColor: AppColors.statusConfirmed.withOpacity(0.08),
+                    backgroundColor: AppColors.statusConfirmed.withValues(
+                      alpha: 0.08,
+                    ),
                   ),
                 ),
               ],
             ),
           ),
-        if (apt.email.isNotEmpty) _DetailRow(icon: Icons.mail_outline_rounded, label: 'Email', value: apt.email),
-        if (apt.visitReason.isNotEmpty) _DetailRow(icon: Icons.edit_note_rounded, label: 'Reason', value: apt.visitReason),
+        if (apt.email.isNotEmpty)
+          _DetailRow(
+            icon: Icons.mail_outline_rounded,
+            label: 'Email',
+            value: apt.email,
+          ),
+        if (apt.visitReason.isNotEmpty)
+          _DetailRow(
+            icon: Icons.edit_note_rounded,
+            label: 'Reason',
+            value: apt.visitReason,
+          ),
         const SizedBox(height: 12),
-        OutlinedButton.icon(onPressed: () => setState(() => _isEditing = true), icon: const Icon(Icons.edit_rounded, size: 18), label: const Text('Edit Appointment')),
+        OutlinedButton.icon(
+          onPressed: () => setState(() => _isEditing = true),
+          icon: const Icon(Icons.edit_rounded, size: 18),
+          label: const Text('Edit Appointment'),
+        ),
       ],
     );
   }
@@ -841,38 +1190,102 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Edit Appointment', style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 15)),
+          Text(
+            'Edit Appointment',
+            style: GoogleFonts.poppins(
+              fontWeight: FontWeight.w700,
+              fontSize: 15,
+            ),
+          ),
           const SizedBox(height: 14),
-          TextFormField(controller: _nameController, decoration: const InputDecoration(labelText: 'Patient name', prefixIcon: Icon(Icons.person_outline_rounded))),
+          TextFormField(
+            controller: _nameController,
+            decoration: const InputDecoration(
+              labelText: 'Patient name',
+              prefixIcon: Icon(Icons.person_outline_rounded),
+            ),
+          ),
           const SizedBox(height: 10),
-          TextFormField(controller: _phoneController, decoration: const InputDecoration(labelText: 'Phone', prefixIcon: Icon(Icons.phone_outlined))),
+          TextFormField(
+            controller: _phoneController,
+            decoration: const InputDecoration(
+              labelText: 'Phone',
+              prefixIcon: Icon(Icons.phone_outlined),
+            ),
+          ),
           const SizedBox(height: 10),
-          TextFormField(controller: _emailController, decoration: const InputDecoration(labelText: 'Email', prefixIcon: Icon(Icons.mail_outline_rounded))),
+          TextFormField(
+            controller: _emailController,
+            decoration: const InputDecoration(
+              labelText: 'Email',
+              prefixIcon: Icon(Icons.mail_outline_rounded),
+            ),
+          ),
           const SizedBox(height: 10),
           _buildDropdownTextField(
             controller: _professionController,
             labelText: 'Profession',
             prefixIcon: Icons.work_outline_rounded,
             options: [
-              'Engineer', 'Doctor', 'Teacher', 'Student', 'Office Worker', 'Driver', 'Laborer', 'Retired', 'Housewife',
-              'Businessman', 'Nurse', 'Salesperson', 'Accountant', 'Builder/Mason', 'Farmer', 'Unemployed', 'Self-employed',
-              'Artist', 'Software Developer', 'Security Guard', 'Police Officer', 'Soldier', 'Tailor', 'Shopkeeper', 'Chef', 'Other'
+              'Engineer',
+              'Doctor',
+              'Teacher',
+              'Student',
+              'Office Worker',
+              'Driver',
+              'Laborer',
+              'Retired',
+              'Housewife',
+              'Businessman',
+              'Nurse',
+              'Salesperson',
+              'Accountant',
+              'Builder/Mason',
+              'Farmer',
+              'Unemployed',
+              'Self-employed',
+              'Artist',
+              'Software Developer',
+              'Security Guard',
+              'Police Officer',
+              'Soldier',
+              'Tailor',
+              'Shopkeeper',
+              'Chef',
+              'Other',
             ],
           ),
           const SizedBox(height: 10),
-          TextFormField(controller: _treatmentController, decoration: const InputDecoration(labelText: 'Treatment', prefixIcon: Icon(Icons.medical_services_outlined))),
+          TextFormField(
+            controller: _treatmentController,
+            decoration: const InputDecoration(
+              labelText: 'Treatment',
+              prefixIcon: Icon(Icons.medical_services_outlined),
+            ),
+          ),
           const SizedBox(height: 10),
           OutlinedButton.icon(
             onPressed: _pickDateTime,
             icon: const Icon(Icons.calendar_today_rounded, size: 18),
-            label: Text(_scheduledAt != null ? DateFormat('d MMM y • hh:mm a').format(_scheduledAt!) : 'Change date & time'),
+            label: Text(
+              _scheduledAt != null
+                  ? DateFormat('d MMM y • hh:mm a').format(_scheduledAt!)
+                  : 'Change date & time',
+            ),
           ),
           const SizedBox(height: 10),
           DropdownButtonFormField<String>(
             isExpanded: true,
-            value: _statusValue,
+            initialValue: _statusValue,
             decoration: const InputDecoration(labelText: 'Status'),
-            items: ['Pending', 'Confirmed', 'Completed', 'Cancelled', 'No Show'].map((s) => DropdownMenuItem(value: s, child: Text(s, style: GoogleFonts.poppins()))).toList(),
+            items: ['Pending', 'Confirmed', 'Completed', 'Cancelled', 'No Show']
+                .map(
+                  (s) => DropdownMenuItem(
+                    value: s,
+                    child: Text(s, style: GoogleFonts.poppins()),
+                  ),
+                )
+                .toList(),
             onChanged: (v) => setState(() => _statusValue = v ?? _statusValue),
           ),
           const SizedBox(height: 10),
@@ -889,26 +1302,68 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
                   _durationController.text = val.toString();
                 },
                 itemBuilder: (_) => [
-                  PopupMenuItem(value: 20, child: Text('20 minutes', style: GoogleFonts.poppins(fontSize: 13))),
-                  PopupMenuItem(value: 40, child: Text('40 minutes', style: GoogleFonts.poppins(fontSize: 13))),
-                  PopupMenuItem(value: 60, child: Text('60 minutes', style: GoogleFonts.poppins(fontSize: 13))),
-                  PopupMenuItem(value: 80, child: Text('80 minutes', style: GoogleFonts.poppins(fontSize: 13))),
+                  PopupMenuItem(
+                    value: 20,
+                    child: Text(
+                      '20 minutes',
+                      style: GoogleFonts.poppins(fontSize: 13),
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: 40,
+                    child: Text(
+                      '40 minutes',
+                      style: GoogleFonts.poppins(fontSize: 13),
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: 60,
+                    child: Text(
+                      '60 minutes',
+                      style: GoogleFonts.poppins(fontSize: 13),
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: 80,
+                    child: Text(
+                      '80 minutes',
+                      style: GoogleFonts.poppins(fontSize: 13),
+                    ),
+                  ),
                 ],
               ),
             ),
           ),
-          
+
           const SizedBox(height: 18),
           const Divider(),
           const SizedBox(height: 12),
-          Text('Clinical Assessment & Treatment', style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 14)),
+          Text(
+            'Clinical Assessment & Treatment',
+            style: GoogleFonts.poppins(
+              fontWeight: FontWeight.w700,
+              fontSize: 14,
+            ),
+          ),
           const SizedBox(height: 12),
-          
+
           // Pain level slider
           Row(
             children: [
-              Text('Pain Level: ', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 13)),
-              Text('${_painLevel.round()}/10', style: GoogleFonts.poppins(fontWeight: FontWeight.w800, color: _getPainColor(_painLevel.round()))),
+              Text(
+                'Pain Level: ',
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+              ),
+              Text(
+                '${_painLevel.round()}/10',
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w800,
+                  color: _getPainColor(_painLevel.round()),
+                ),
+              ),
             ],
           ),
           Slider(
@@ -971,16 +1426,27 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
             children: [
               Row(
                 children: [
-                  Icon(Icons.photo_camera_rounded, size: 18, color: Theme.of(context).colorScheme.primary),
+                  Icon(
+                    Icons.photo_camera_rounded,
+                    size: 18,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
                   const SizedBox(width: 8),
-                  Text('Posture Photo', style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600)),
+                  Text(
+                    'Posture Photo',
+                    style: GoogleFonts.poppins(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                   const Spacer(),
                   if (_posturalPhotoPath != null)
                     TextButton.icon(
                       icon: const Icon(Icons.delete_outline_rounded, size: 16),
                       label: const Text('Remove'),
                       style: TextButton.styleFrom(foregroundColor: Colors.red),
-                      onPressed: () => setState(() => _posturalPhotoPath = null),
+                      onPressed: () =>
+                          setState(() => _posturalPhotoPath = null),
                     ),
                 ],
               ),
@@ -993,6 +1459,7 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
                     height: 150,
                     width: double.infinity,
                     fit: BoxFit.cover,
+                    cacheWidth: 800,
                   ),
                 )
               else
@@ -1003,8 +1470,19 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
                         icon: const Icon(Icons.camera_alt_rounded, size: 18),
                         label: const Text('Camera'),
                         onPressed: () async {
-                          final img = await ImagePicker().pickImage(source: ImageSource.camera, imageQuality: 80);
-                          if (img != null) setState(() => _posturalPhotoPath = img.path);
+                          final img = await ImagePicker().pickImage(
+                            source: ImageSource.camera,
+                          );
+                          if (img != null && mounted) {
+                            final compressed =
+                                await ImageService.compressPostureImage(
+                                  File(img.path),
+                                );
+                            setState(
+                              () => _posturalPhotoPath =
+                                  compressed?.path ?? img.path,
+                            );
+                          }
                         },
                       ),
                     ),
@@ -1014,8 +1492,19 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
                         icon: const Icon(Icons.photo_library_rounded, size: 18),
                         label: const Text('Gallery'),
                         onPressed: () async {
-                          final img = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 80);
-                          if (img != null) setState(() => _posturalPhotoPath = img.path);
+                          final img = await ImagePicker().pickImage(
+                            source: ImageSource.gallery,
+                          );
+                          if (img != null && mounted) {
+                            final compressed =
+                                await ImageService.compressPostureImage(
+                                  File(img.path),
+                                );
+                            setState(
+                              () => _posturalPhotoPath =
+                                  compressed?.path ?? img.path,
+                            );
+                          }
                         },
                       ),
                     ),
@@ -1035,9 +1524,17 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
                   prefixIcon: Icons.speed_rounded,
                   hintText: 'e.g. 120/80',
                   options: [
-                    '120/80 (Normal)', '110/70 (Optimal)', '115/75 (Healthy)', '100/60 (Hypotension)',
-                    '130/85 (Prehypertension)', '135/85 (Prehypertension)', '140/90 (Stage 1)',
-                    '145/90 (Stage 1)', '150/95 (Stage 2)', '160/100 (Stage 2)', '180/120 (Hypertensive Crisis)'
+                    '120/80 (Normal)',
+                    '110/70 (Optimal)',
+                    '115/75 (Healthy)',
+                    '100/60 (Hypotension)',
+                    '130/85 (Prehypertension)',
+                    '135/85 (Prehypertension)',
+                    '140/90 (Stage 1)',
+                    '145/90 (Stage 1)',
+                    '150/95 (Stage 2)',
+                    '160/100 (Stage 2)',
+                    '180/120 (Hypertensive Crisis)',
                   ],
                 ),
               ),
@@ -1050,8 +1547,20 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
                   keyboardType: TextInputType.number,
                   hintText: 'e.g. 72',
                   options: [
-                    '50 (Bradycardia/Athlete)', '55', '60 (Normal)', '65', '70', '72',
-                    '75', '80', '85', '90', '95', '100 (Tachycardia)', '105', '110'
+                    '50 (Bradycardia/Athlete)',
+                    '55',
+                    '60 (Normal)',
+                    '65',
+                    '70',
+                    '72',
+                    '75',
+                    '80',
+                    '85',
+                    '90',
+                    '95',
+                    '100 (Tachycardia)',
+                    '105',
+                    '110',
                   ],
                 ),
               ),
@@ -1066,9 +1575,41 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
             prefixIcon: Icons.accessibility_new_rounded,
             hintText: 'e.g. C2, L5, Pelvis',
             options: [
-              'C1 (Atlas)', 'C2 (Axis)', 'C3', 'C4', 'C5', 'C6', 'C7', 'T1', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'T8',
-              'T9', 'T10', 'T11', 'T12', 'L1', 'L2', 'L3', 'L4', 'L5', 'Sacrum', 'Coccyx', 'Pelvis', 'Left Ilium', 'Right Ilium',
-              'Occiput', 'Cervicothoracic Junction', 'Thoracolumbar Junction', 'Lumbosacral Junction', 'Sacroiliac (SI) Joint', 'Full Spine Adjustment'
+              'C1 (Atlas)',
+              'C2 (Axis)',
+              'C3',
+              'C4',
+              'C5',
+              'C6',
+              'C7',
+              'T1',
+              'T2',
+              'T3',
+              'T4',
+              'T5',
+              'T6',
+              'T7',
+              'T8',
+              'T9',
+              'T10',
+              'T11',
+              'T12',
+              'L1',
+              'L2',
+              'L3',
+              'L4',
+              'L5',
+              'Sacrum',
+              'Coccyx',
+              'Pelvis',
+              'Left Ilium',
+              'Right Ilium',
+              'Occiput',
+              'Cervicothoracic Junction',
+              'Thoracolumbar Junction',
+              'Lumbosacral Junction',
+              'Sacroiliac (SI) Joint',
+              'Full Spine Adjustment',
             ],
           ),
           const SizedBox(height: 10),
@@ -1095,7 +1636,7 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
               'Core strengthening (Planks/Bird-dog)',
               'Scapular Squeezes (15 reps)',
               'Pectoralis Stretch in doorway',
-              'Stay hydrated & sleep on back/side'
+              'Stay hydrated & sleep on back/side',
             ],
           ),
           const SizedBox(height: 10),
@@ -1107,18 +1648,43 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
             prefixIcon: Icons.next_plan_outlined,
             hintText: 'e.g. 1 week, as needed',
             options: [
-              'Tomorrow', '2 days', '3 days', '5 days', '1 week', '10 days', '2 weeks',
-              '3 weeks', '4 weeks', '6 weeks', '2 months', '3 months', 'Maintenance (Monthly)',
-              'Wellness Checkup', 'As needed (PRN)', 'Discharged from care'
+              'Tomorrow',
+              '2 days',
+              '3 days',
+              '5 days',
+              '1 week',
+              '10 days',
+              '2 weeks',
+              '3 weeks',
+              '4 weeks',
+              '6 weeks',
+              '2 months',
+              '3 months',
+              'Maintenance (Monthly)',
+              'Wellness Checkup',
+              'As needed (PRN)',
+              'Discharged from care',
             ],
           ),
           const SizedBox(height: 18),
-          
-          Row(children: [
-            Expanded(child: OutlinedButton(onPressed: () => setState(() => _isEditing = false), child: const Text('Cancel'))),
-            const SizedBox(width: 12),
-            Expanded(child: ElevatedButton(onPressed: _saveEdits, child: const Text('Save'))),
-          ]),
+
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => setState(() => _isEditing = false),
+                  child: const Text('Cancel'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: _saveEdits,
+                  child: const Text('Save'),
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -1130,7 +1696,12 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
     return Colors.red;
   }
 
-  Widget _buildClinicalIndicator({required IconData icon, required String label, required String value, required Color color}) {
+  Widget _buildClinicalIndicator({
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color color,
+  }) {
     final cs = Theme.of(context).colorScheme;
     return Row(
       children: [
@@ -1140,8 +1711,20 @@ class _AppointmentDetailScreenState extends ConsumerState<AppointmentDetailScree
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(label, style: GoogleFonts.poppins(fontSize: 10, color: cs.onSurface.withValues(alpha: 0.5))),
-              Text(value, style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w700)),
+              Text(
+                label,
+                style: GoogleFonts.poppins(
+                  fontSize: 10,
+                  color: cs.onSurface.withValues(alpha: 0.5),
+                ),
+              ),
+              Text(
+                value,
+                style: GoogleFonts.poppins(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ],
           ),
         ),
@@ -1194,70 +1777,162 @@ class _StatusTimeline extends StatelessWidget {
   Widget build(BuildContext context) {
     const steps = ['Pending', 'Confirmed', 'Completed'];
     final cs = Theme.of(context).colorScheme;
-    final currentIdx = steps.indexWhere((s) => s.toLowerCase() == status.toLowerCase());
+    final currentIdx = steps.indexWhere(
+      (s) => s.toLowerCase() == status.toLowerCase(),
+    );
     final isCancelled = status.toLowerCase() == 'cancelled';
 
     return PremiumCard(
       padding: const EdgeInsets.all(16),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Icon(isCancelled ? Icons.cancel_rounded : Icons.timeline_rounded, size: 18, color: isCancelled ? AppColors.statusCancelled : cs.primary),
-          const SizedBox(width: 8),
-          Text(isCancelled ? 'Appointment Cancelled' : 'Appointment Progress', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 13)),
-        ]),
-        if (!isCancelled) ...[
-          const SizedBox(height: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
           Row(
-            children: List.generate(steps.length * 2 - 1, (i) {
-              if (i.isOdd) {
-                return Expanded(child: Container(height: 2, color: (i ~/ 2) < currentIdx ? AppColors.statusConfirmed : AppColors.grey200));
-              }
-              final idx = i ~/ 2;
-              final done = idx <= currentIdx;
-              final curr = idx == currentIdx;
-              return Column(children: [
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 300),
-                  width: curr ? 30 : 24,
-                  height: curr ? 30 : 24,
-                  decoration: BoxDecoration(shape: BoxShape.circle, color: done ? AppColors.statusConfirmed : AppColors.grey200, boxShadow: curr ? [BoxShadow(color: AppColors.statusConfirmed.withValues(alpha: 0.35), blurRadius: 8)] : []),
-                  child: Center(child: Icon(Icons.check_rounded, size: 14, color: done ? Colors.white : AppColors.grey400)),
+            children: [
+              Icon(
+                isCancelled ? Icons.cancel_rounded : Icons.timeline_rounded,
+                size: 18,
+                color: isCancelled ? AppColors.statusCancelled : cs.primary,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                isCancelled ? 'Appointment Cancelled' : 'Appointment Progress',
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
                 ),
-                const SizedBox(height: 4),
-                Text(steps[idx], style: GoogleFonts.poppins(fontSize: 10, fontWeight: curr ? FontWeight.w600 : FontWeight.w400, color: done ? AppColors.statusConfirmed : AppColors.grey400)),
-              ]);
-            }),
+              ),
+            ],
           ),
+          if (!isCancelled) ...[
+            const SizedBox(height: 14),
+            Row(
+              children: List.generate(steps.length * 2 - 1, (i) {
+                if (i.isOdd) {
+                  return Expanded(
+                    child: Container(
+                      height: 2,
+                      color: (i ~/ 2) < currentIdx
+                          ? AppColors.statusConfirmed
+                          : AppColors.grey200,
+                    ),
+                  );
+                }
+                final idx = i ~/ 2;
+                final done = idx <= currentIdx;
+                final curr = idx == currentIdx;
+                return Column(
+                  children: [
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 300),
+                      width: curr ? 30 : 24,
+                      height: curr ? 30 : 24,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: done
+                            ? AppColors.statusConfirmed
+                            : AppColors.grey200,
+                        boxShadow: curr
+                            ? [
+                                BoxShadow(
+                                  color: AppColors.statusConfirmed.withValues(
+                                    alpha: 0.35,
+                                  ),
+                                  blurRadius: 8,
+                                ),
+                              ]
+                            : [],
+                      ),
+                      child: Center(
+                        child: Icon(
+                          Icons.check_rounded,
+                          size: 14,
+                          color: done ? Colors.white : AppColors.grey400,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      steps[idx],
+                      style: GoogleFonts.poppins(
+                        fontSize: 10,
+                        fontWeight: curr ? FontWeight.w600 : FontWeight.w400,
+                        color: done
+                            ? AppColors.statusConfirmed
+                            : AppColors.grey400,
+                      ),
+                    ),
+                  ],
+                );
+              }),
+            ),
+          ],
         ],
-      ]),
+      ),
     );
   }
 }
 
 class _DetailRow extends StatelessWidget {
-  const _DetailRow({required this.icon, required this.label, required this.value, this.trailing});
-  final IconData icon; final String label; final String value; final Widget? trailing;
+  const _DetailRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+    this.trailing,
+  });
+  final IconData icon;
+  final String label;
+  final String value;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
-        Icon(icon, size: 17, color: cs.onSurface.withValues(alpha: 0.45)),
-        const SizedBox(width: 10),
-        SizedBox(width: 68, child: Text(label, style: GoogleFonts.poppins(fontSize: 12, color: cs.onSurface.withValues(alpha: 0.5)))),
-        const SizedBox(width: 8),
-        Expanded(child: Text(value, style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w500))),
-        if (trailing != null) trailing!,
-      ]),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Icon(icon, size: 17, color: cs.onSurface.withValues(alpha: 0.45)),
+          const SizedBox(width: 10),
+          SizedBox(
+            width: 68,
+            child: Text(
+              label,
+              style: GoogleFonts.poppins(
+                fontSize: 12,
+                color: cs.onSurface.withValues(alpha: 0.5),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              value,
+              style: GoogleFonts.poppins(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          ?trailing,
+        ],
+      ),
     );
   }
 }
 
 class _QuickBtn extends StatelessWidget {
-  const _QuickBtn({required this.icon, required this.label, required this.color, required this.onTap});
-  final IconData icon; final String label; final Color color; final VoidCallback onTap;
+  const _QuickBtn({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -1266,12 +1941,25 @@ class _QuickBtn extends StatelessWidget {
         onTap: onTap,
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 12),
-          decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(14), border: Border.all(color: color.withValues(alpha: 0.25))),
-          child: Column(children: [
-            Icon(icon, color: color, size: 22),
-            const SizedBox(height: 4),
-            Text(label, style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600, color: color)),
-          ]),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: color.withValues(alpha: 0.25)),
+          ),
+          child: Column(
+            children: [
+              Icon(icon, color: color, size: 22),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                style: GoogleFonts.poppins(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: color,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

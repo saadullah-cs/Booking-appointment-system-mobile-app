@@ -17,11 +17,13 @@ class AppBootstrapService {
     Future<void> Function()? storageInitializer,
     Future<void> Function()? notificationInitializer,
     void Function(Object error, StackTrace stackTrace)? onError,
-  })  : _firebaseInitializer = firebaseInitializer ?? _defaultFirebaseInitializer,
-        _authInitializer = authInitializer ?? _defaultAuthInitializer,
-        _storageInitializer = storageInitializer ?? _defaultStorageInitializer,
-        _notificationInitializer = notificationInitializer ?? _defaultNotificationInitializer,
-        _onError = onError ?? _defaultErrorHandler;
+  }) : _firebaseInitializer =
+           firebaseInitializer ?? _defaultFirebaseInitializer,
+       _authInitializer = authInitializer ?? _defaultAuthInitializer,
+       _storageInitializer = storageInitializer ?? _defaultStorageInitializer,
+       _notificationInitializer =
+           notificationInitializer ?? _defaultNotificationInitializer,
+       _onError = onError ?? _defaultErrorHandler;
 
   final Future<void> Function() _firebaseInitializer;
   final Future<void> Function() _authInitializer;
@@ -39,7 +41,9 @@ class AppBootstrapService {
     }
   }
 
-  Future<void> initializeAppServices({bool runNotificationsInBackground = true}) async {
+  Future<void> initializeAppServices({
+    bool runNotificationsInBackground = true,
+  }) async {
     // Await Firebase initialization so that Firebase features (Auth, Firestore, etc.)
     // are fully set up before the UI starts building and attempting to access them.
     await initializeFirebase();
@@ -93,7 +97,9 @@ class AppBootstrapService {
       );
     } on PlatformException catch (error) {
       if (error.message?.contains('Failed to load FirebaseOptions') == true) {
-        debugPrint('Firebase configuration is missing at runtime: ${error.message}');
+        debugPrint(
+          'Firebase configuration is missing at runtime: ${error.message}',
+        );
         return;
       }
       rethrow;

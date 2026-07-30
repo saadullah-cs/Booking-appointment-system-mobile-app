@@ -33,7 +33,9 @@ class ClinicalNote {
       patientName: json['patientName']?.toString() ?? '',
       note: json['note']?.toString() ?? '',
       category: json['category']?.toString() ?? 'General',
-      createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? '') ?? DateTime.now(),
+      createdAt:
+          DateTime.tryParse(json['createdAt']?.toString() ?? '') ??
+          DateTime.now(),
       isTodo: json['isTodo'] == true,
       isCompleted: json['isCompleted'] == true,
     );
@@ -84,7 +86,8 @@ class ClinicalNotesRepository {
 
   bool get _useFirestore {
     try {
-      return Firebase.apps.isNotEmpty && FirebaseAuth.instance.currentUser != null;
+      return Firebase.apps.isNotEmpty &&
+          FirebaseAuth.instance.currentUser != null;
     } catch (_) {
       return false;
     }
@@ -92,7 +95,9 @@ class ClinicalNotesRepository {
 
   Future<List<ClinicalNote>> loadNotes() async {
     final now = DateTime.now();
-    if (_cachedNotes != null && _cachedAt != null && now.difference(_cachedAt!) < _cacheTtl) {
+    if (_cachedNotes != null &&
+        _cachedAt != null &&
+        now.difference(_cachedAt!) < _cacheTtl) {
       return List<ClinicalNote>.unmodifiable(_cachedNotes!);
     }
 
@@ -122,7 +127,10 @@ class ClinicalNotesRepository {
 
     final decoded = jsonDecode(raw) as List<dynamic>;
     final notes = decoded
-        .map((entry) => ClinicalNote.fromJson(Map<String, dynamic>.from(entry as Map)))
+        .map(
+          (entry) =>
+              ClinicalNote.fromJson(Map<String, dynamic>.from(entry as Map)),
+        )
         .toList(growable: false);
     _cachedNotes = notes;
     _cachedAt = now;

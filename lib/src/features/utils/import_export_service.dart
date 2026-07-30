@@ -12,13 +12,13 @@ class ImportExportService {
   }) async {
     try {
       final excel = Excel.createExcel();
-      
+
       // Populate the sheets
       bool isFirst = true;
       for (final entry in sheets.entries) {
         final sheetName = entry.key;
         final rows = entry.value;
-        
+
         Sheet sheet;
         if (isFirst) {
           excel.rename('Sheet1', sheetName);
@@ -27,7 +27,7 @@ class ImportExportService {
         } else {
           sheet = excel[sheetName];
         }
-        
+
         for (final row in rows) {
           final cellValues = row.map((cell) {
             if (cell == null) return TextCellValue('');
@@ -39,21 +39,21 @@ class ImportExportService {
           sheet.appendRow(cellValues);
         }
       }
-      
+
       final fileBytes = excel.save();
       if (fileBytes == null) return false;
-      
+
       final outputFile = await FilePicker.saveFile(
         dialogTitle: 'Select Location to Save Excel Sheet',
         fileName: defaultFileName,
         type: FileType.custom,
         allowedExtensions: ['xlsx'],
       );
-      
+
       if (outputFile == null) {
         return false;
       }
-      
+
       final file = File(outputFile);
       await file.writeAsBytes(fileBytes);
       return true;
@@ -101,9 +101,7 @@ class ImportExportService {
   }
 
   /// Prompts the user to select a JSON file from their computer and returns its content.
-  static Future<String?> importBackup({
-    required BuildContext context,
-  }) async {
+  static Future<String?> importBackup({required BuildContext context}) async {
     try {
       final result = await FilePicker.pickFiles(
         dialogTitle: 'Select JSON Backup File to Restore',
@@ -130,9 +128,7 @@ class ImportExportService {
   }
 
   /// Prompts the user to select an Excel (.xlsx) file and returns an Excel object.
-  static Future<Excel?> importExcel({
-    required BuildContext context,
-  }) async {
+  static Future<Excel?> importExcel({required BuildContext context}) async {
     try {
       final result = await FilePicker.pickFiles(
         dialogTitle: 'Select Excel (.xlsx) Backup File to Restore',

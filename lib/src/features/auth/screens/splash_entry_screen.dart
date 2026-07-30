@@ -14,7 +14,8 @@ class SplashEntryScreen extends StatefulWidget {
   State<SplashEntryScreen> createState() => _SplashEntryScreenState();
 }
 
-class _SplashEntryScreenState extends State<SplashEntryScreen> with TickerProviderStateMixin {
+class _SplashEntryScreenState extends State<SplashEntryScreen>
+    with TickerProviderStateMixin {
   late final AnimationController _fadeController;
   late final AnimationController _scaleController;
   late final Animation<double> _fadeAnim;
@@ -25,10 +26,19 @@ class _SplashEntryScreenState extends State<SplashEntryScreen> with TickerProvid
   void initState() {
     super.initState();
 
-    _fadeController = AnimationController(vsync: this, duration: const Duration(milliseconds: 600));
-    _scaleController = AnimationController(vsync: this, duration: const Duration(milliseconds: 800));
+    _fadeController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    );
+    _scaleController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
 
-    _fadeAnim = CurvedAnimation(parent: _fadeController, curve: Curves.easeInOut);
+    _fadeAnim = CurvedAnimation(
+      parent: _fadeController,
+      curve: Curves.easeInOut,
+    );
     _scaleAnim = Tween<double>(begin: 0.94, end: 1.0).animate(
       CurvedAnimation(parent: _scaleController, curve: Curves.easeOutCubic),
     );
@@ -41,13 +51,15 @@ class _SplashEntryScreenState extends State<SplashEntryScreen> with TickerProvid
       _handleRedirect();
     });
   }
+
   Future<void> _handleRedirect() async {
     final prefs = await AppPreferences.instance.prefs;
     final isStaffLoggedIn = prefs.getBool('is_staff_logged_in') ?? false;
     if (isStaffLoggedIn) {
       if (mounted) {
         final staffEmail = prefs.getString('logged_in_staff_email') ?? '';
-        final staffPinEnabled = prefs.getBool('staff_pin_enabled_$staffEmail') ?? false;
+        final staffPinEnabled =
+            prefs.getBool('staff_pin_enabled_$staffEmail') ?? false;
         if (staffPinEnabled) {
           context.go('/staff-lock');
         } else {
@@ -59,13 +71,16 @@ class _SplashEntryScreenState extends State<SplashEntryScreen> with TickerProvid
 
     bool firebaseSignedIn = false;
     try {
-      if (Firebase.apps.isNotEmpty && FirebaseAuth.instance.currentUser != null) {
+      if (Firebase.apps.isNotEmpty &&
+          FirebaseAuth.instance.currentUser != null) {
         try {
           await FirebaseAuth.instance.currentUser!.reload();
           firebaseSignedIn = FirebaseAuth.instance.currentUser != null;
         } on FirebaseAuthException catch (e) {
           debugPrint('Firebase session validation failed: ${e.code}');
-          if (e.code == 'user-not-found' || e.code == 'user-disabled' || e.code == 'invalid-credential') {
+          if (e.code == 'user-not-found' ||
+              e.code == 'user-disabled' ||
+              e.code == 'invalid-credential') {
             await FirebaseAuth.instance.signOut();
             final prefs = await AppPreferences.instance.prefs;
             await prefs.remove('local_auth_current_user');
@@ -131,7 +146,7 @@ class _SplashEntryScreenState extends State<SplashEntryScreen> with TickerProvid
                 height: size.width * 0.9,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: Colors.white.withOpacity(0.04),
+                  color: Colors.white.withValues(alpha: 0.04),
                 ),
               ),
             ),
@@ -143,7 +158,7 @@ class _SplashEntryScreenState extends State<SplashEntryScreen> with TickerProvid
                 height: size.width * 0.8,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: Colors.white.withOpacity(0.03),
+                  color: Colors.white.withValues(alpha: 0.03),
                 ),
               ),
             ),
@@ -155,7 +170,10 @@ class _SplashEntryScreenState extends State<SplashEntryScreen> with TickerProvid
                   scale: _scaleAnim,
                   child: Center(
                     child: SingleChildScrollView(
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 20,
+                      ),
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -168,7 +186,7 @@ class _SplashEntryScreenState extends State<SplashEntryScreen> with TickerProvid
                               borderRadius: BorderRadius.circular(28),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withOpacity(0.2),
+                                  color: Colors.black.withValues(alpha: 0.2),
                                   blurRadius: 25,
                                   offset: const Offset(0, 10),
                                 ),
@@ -178,7 +196,7 @@ class _SplashEntryScreenState extends State<SplashEntryScreen> with TickerProvid
                             child: Image.asset(
                               'assets/ChatGPT Image Jul 9, 2025, 11_09_56 PM.png',
                               fit: BoxFit.contain,
-                              errorBuilder: (_, __, ___) => const Icon(
+                              errorBuilder: (_, _, _) => const Icon(
                                 Icons.local_hospital_rounded,
                                 color: AppColors.primary,
                                 size: 50,
@@ -203,7 +221,7 @@ class _SplashEntryScreenState extends State<SplashEntryScreen> with TickerProvid
                             'Precision Spine & Posture Correction',
                             style: GoogleFonts.poppins(
                               fontSize: 12,
-                              color: Colors.white.withOpacity(0.8),
+                              color: Colors.white.withValues(alpha: 0.8),
                               letterSpacing: 0.5,
                             ),
                             textAlign: TextAlign.center,
@@ -215,10 +233,10 @@ class _SplashEntryScreenState extends State<SplashEntryScreen> with TickerProvid
                             width: double.infinity,
                             padding: const EdgeInsets.all(22),
                             decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.12),
+                              color: Colors.white.withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(24),
                               border: Border.all(
-                                color: Colors.white.withOpacity(0.2),
+                                color: Colors.white.withValues(alpha: 0.2),
                                 width: 1.5,
                               ),
                             ),
@@ -228,21 +246,33 @@ class _SplashEntryScreenState extends State<SplashEntryScreen> with TickerProvid
                                 _buildDetailRow(
                                   icon: Icons.person_rounded,
                                   title: 'Attending Practitioner',
-                                  value: 'DR. BASHIR AHMAD\nChiropractic Specialist',
+                                  value:
+                                      'DR. BASHIR AHMAD\nChiropractic Specialist',
                                 ),
-                                const Divider(color: Colors.white24, height: 24),
+                                const Divider(
+                                  color: Colors.white24,
+                                  height: 24,
+                                ),
                                 _buildDetailRow(
                                   icon: Icons.access_time_rounded,
                                   title: 'Clinic Timings',
-                                  value: 'Mon – Sat: 08:00 AM – 06:00 PM\nSunday: CLOSED / WEEKLY OFF',
+                                  value:
+                                      'Mon – Sat: 08:00 AM – 06:00 PM\nSunday: CLOSED / WEEKLY OFF',
                                 ),
-                                const Divider(color: Colors.white24, height: 24),
+                                const Divider(
+                                  color: Colors.white24,
+                                  height: 24,
+                                ),
                                 _buildDetailRow(
                                   icon: Icons.location_on_rounded,
                                   title: 'Clinic Location',
-                                  value: 'Tehsil Road, Near Peshawar Model School, Nowshera City, KPK.',
+                                  value:
+                                      'Tehsil Road, Near Peshawar Model School, Nowshera City, KPK.',
                                 ),
-                                const Divider(color: Colors.white24, height: 24),
+                                const Divider(
+                                  color: Colors.white24,
+                                  height: 24,
+                                ),
                                 _buildDetailRow(
                                   icon: Icons.phone_android_rounded,
                                   title: 'Emergency Contact',
@@ -269,7 +299,7 @@ class _SplashEntryScreenState extends State<SplashEntryScreen> with TickerProvid
                               Text(
                                 'Loading system...',
                                 style: GoogleFonts.poppins(
-                                  color: Colors.white.withOpacity(0.7),
+                                  color: Colors.white.withValues(alpha: 0.7),
                                   fontSize: 13,
                                   fontWeight: FontWeight.w500,
                                 ),
@@ -284,7 +314,10 @@ class _SplashEntryScreenState extends State<SplashEntryScreen> with TickerProvid
                             },
                             style: TextButton.styleFrom(
                               foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 24,
+                                vertical: 12,
+                              ),
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
@@ -298,7 +331,10 @@ class _SplashEntryScreenState extends State<SplashEntryScreen> with TickerProvid
                                   ),
                                 ),
                                 const SizedBox(width: 6),
-                                const Icon(Icons.arrow_forward_rounded, size: 16),
+                                const Icon(
+                                  Icons.arrow_forward_rounded,
+                                  size: 16,
+                                ),
                               ],
                             ),
                           ),
@@ -326,7 +362,7 @@ class _SplashEntryScreenState extends State<SplashEntryScreen> with TickerProvid
         Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.15),
+            color: Colors.white.withValues(alpha: 0.15),
             borderRadius: BorderRadius.circular(10),
           ),
           child: Icon(icon, color: Colors.white, size: 18),

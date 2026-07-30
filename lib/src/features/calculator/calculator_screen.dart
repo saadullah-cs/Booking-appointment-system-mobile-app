@@ -207,7 +207,8 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
         _onKeyPress('÷');
       } else if (character == '%' || character == '=') {
         _onKeyPress(character!);
-      } else if (logicalKey == LogicalKeyboardKey.enter || logicalKey == LogicalKeyboardKey.numpadEnter) {
+      } else if (logicalKey == LogicalKeyboardKey.enter ||
+          logicalKey == LogicalKeyboardKey.numpadEnter) {
         _onKeyPress('=');
       } else if (logicalKey == LogicalKeyboardKey.backspace) {
         _onKeyPress('⌫');
@@ -265,7 +266,7 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
               color: cs.primary.withValues(alpha: 0.15),
               blurRadius: 15,
               spreadRadius: 2,
-            )
+            ),
           ],
         ),
         child: Column(
@@ -305,7 +306,7 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
                       color: cs.primary.withValues(alpha: 0.5),
                       blurRadius: 10,
                       offset: const Offset(0, 0),
-                    )
+                    ),
                   ],
                 ),
               ),
@@ -325,18 +326,26 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
               children: row.map((btn) {
                 final isOperator = ['÷', '×', '−', '+', '='].contains(btn);
                 final isSpecial = ['AC', '⁺/₋', '%', '⌫'].contains(btn);
-                
+
                 Color btnColor;
                 Color textColor;
 
                 if (isOperator) {
-                  btnColor = btn == '=' ? cs.primary : cs.primary.withValues(alpha: 0.15);
+                  btnColor = btn == '='
+                      ? cs.primary
+                      : cs.primary.withValues(alpha: 0.15);
                   textColor = btn == '=' ? Colors.white : cs.primary;
                 } else if (isSpecial) {
-                  btnColor = isDark ? const Color(0xFF1E2A3B) : const Color(0xFFE2E8F0);
-                  textColor = isDark ? const Color(0xFFCBD5E1) : const Color(0xFF475569);
+                  btnColor = isDark
+                      ? const Color(0xFF1E2A3B)
+                      : const Color(0xFFE2E8F0);
+                  textColor = isDark
+                      ? const Color(0xFFCBD5E1)
+                      : const Color(0xFF475569);
                 } else {
-                  btnColor = isDark ? const Color(0xFF1E2A3B) : const Color(0xFFF8FAFC);
+                  btnColor = isDark
+                      ? const Color(0xFF1E2A3B)
+                      : const Color(0xFFF8FAFC);
                   textColor = isDark ? Colors.white : const Color(0xFF0F172A);
                 }
 
@@ -382,10 +391,14 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
                 if (!isWide)
                   IconButton(
                     icon: Icon(
-                      _showHistoryOnMobile ? Icons.history_toggle_off_rounded : Icons.history_rounded,
+                      _showHistoryOnMobile
+                          ? Icons.history_toggle_off_rounded
+                          : Icons.history_rounded,
                       color: cs.primary,
                     ),
-                    onPressed: () => setState(() => _showHistoryOnMobile = !_showHistoryOnMobile),
+                    onPressed: () => setState(
+                      () => _showHistoryOnMobile = !_showHistoryOnMobile,
+                    ),
                     tooltip: 'Toggle History Log',
                   ),
               ],
@@ -468,7 +481,9 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
                               padding: const EdgeInsets.all(10),
                               decoration: BoxDecoration(
                                 color: cs.surface,
-                                border: Border.all(color: cs.outline.withValues(alpha: 0.15)),
+                                border: Border.all(
+                                  color: cs.outline.withValues(alpha: 0.15),
+                                ),
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               child: Column(
@@ -478,14 +493,17 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
                                     expr,
                                     style: GoogleFonts.poppins(
                                       fontSize: 11,
-                                      color: cs.onSurface.withValues(alpha: 0.5),
+                                      color: cs.onSurface.withValues(
+                                        alpha: 0.5,
+                                      ),
                                     ),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                   const SizedBox(height: 2),
                                   Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
                                     children: [
                                       Text(
                                         '= $val',
@@ -495,7 +513,11 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
                                           color: cs.primary,
                                         ),
                                       ),
-                                      const Icon(Icons.arrow_forward_ios_rounded, size: 10, color: Colors.grey),
+                                      const Icon(
+                                        Icons.arrow_forward_ios_rounded,
+                                        size: 10,
+                                        color: Colors.grey,
+                                      ),
                                     ],
                                   ),
                                 ],
@@ -551,7 +573,10 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
                       if (_showHistoryOnMobile) ...[
                         const SizedBox(height: 16),
                         ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 380, maxHeight: 220),
+                          constraints: const BoxConstraints(
+                            maxWidth: 380,
+                            maxHeight: 220,
+                          ),
                           child: buildHistoryCard(),
                         ),
                       ],
@@ -605,7 +630,7 @@ class _CalcButtonState extends State<_CalcButton> {
                       color: Colors.black.withValues(alpha: 0.08),
                       blurRadius: 4,
                       offset: const Offset(0, 3),
-                    )
+                    ),
                   ],
           ),
           child: Center(
