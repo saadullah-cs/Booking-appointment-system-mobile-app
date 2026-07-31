@@ -5,7 +5,9 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:printing/printing.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:url_launcher/url_launcher_string.dart';
+import '../../services/payment_gateway_service.dart';
 
 import '../../models/appointment.dart';
 import 'appointment_repository.dart';
@@ -118,6 +120,11 @@ class _AppointmentDetailScreenState
     }
   }
 
+  // Payment Controllers & State
+  final _amountController = TextEditingController();
+  String _paymentMethod = 'cash';
+  String _paymentStatus = 'pending';
+
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
@@ -154,6 +161,7 @@ class _AppointmentDetailScreenState
 
   @override
   void dispose() {
+    _amountController.dispose();
     _noteController.dispose();
     _nameController.dispose();
     _phoneController.dispose();
@@ -168,16 +176,6 @@ class _AppointmentDetailScreenState
     _durationController.dispose();
     _techniqueController.dispose();
     _improvementController.dispose();
-    _nameController.dispose();
-    _phoneController.dispose();
-    _emailController.dispose();
-    _treatmentController.dispose();
-    _bpController.dispose();
-    _pulseController.dispose();
-    _segmentsController.dispose();
-    _exercisesController.dispose();
-    _followUpController.dispose();
-    _professionController.dispose();
     super.dispose();
   }
 
@@ -193,6 +191,13 @@ class _AppointmentDetailScreenState
       _treatmentController.text = apt?.treatmentType ?? '';
       _statusValue = apt?.status ?? 'Pending';
       _scheduledAt = apt?.scheduledAt;
+
+      // Initialize payment fields
+      _paymentMethod = apt?.paymentMethod ?? 'cash';
+      _paymentStatus = apt?.paymentStatus ?? 'pending';
+      _amountController.text = (apt?.amount ?? 0.0) > 0
+          ? apt!.amount.toStringAsFixed(0)
+          : '5000';
 
       // Initialize clinical assessment fields
       _painLevel = apt?.painLevel?.toDouble() ?? 0.0;
@@ -213,6 +218,55 @@ class _AppointmentDetailScreenState
           ? apt!.posturalPhotoPath
           : null;
     });
+  }
+
+  Future<void> _retryPayment(Appointment apt) async {
+    final payService = PaymentGatewayService();
+    try {
+      final amt = (double.tryParse(_amountController.text.trim()) ?? 0) > 0
+          ? double.parse(_amountController.text.trim())
+          : (apt.amount > 0 ? apt.amount : 5000.0);
+
+      final res = await payService.initializeSafepayTransaction(
+        amount: amt,
+        currency: 'PKR',
+        customerEmail: apt.email,
+      );
+
+      if (payService.safepayKey.isEmpty ||
+          payService.safepayKey.contains('your_safepay_api_key')) {
+        if (mounted) {
+          await showDialog(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Payment Gateway - Test Mode'),
+              content: const Text(
+                'The online payment gateway is currently in Test Mode (Key unconfigured in .env). '
+                'In production, this launches the secure Safepay/PayFast online checkout portal.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Continue with Simulation'),
+                ),
+              ],
+            ),
+          );
+        }
+      } else {
+        final url = Uri.parse(res['checkoutUrl'] ?? '');
+        if (await canLaunchUrl(url)) {
+          await launchUrl(url, mode: LaunchMode.externalApplication);
+        }
+      }
+    } catch (e) {
+      debugPrint('Retry Payment failed: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Payment initialization failed: $e')),
+        );
+      }
+    }
   }
 
   Future<void> _checkCompletedAndPrompt(Appointment appointment) async {
@@ -302,6 +356,9 @@ class _AppointmentDetailScreenState
       adjustmentTechnique: _techniqueController.text.trim(),
       patientImprovement: _improvementController.text.trim(),
       posturalPhotoPath: _posturalPhotoPath ?? '',
+      paymentMethod: _paymentMethod,
+      paymentStatus: _paymentStatus,
+      amount: double.tryParse(_amountController.text.trim()) ?? _appointment!.amount,
       updatedAt: DateTime.now(),
     );
     await _repo.updateAppointment(updated);
@@ -1175,6 +1232,95 @@ class _AppointmentDetailScreenState
             value: apt.visitReason,
           ),
         const SizedBox(height: 12),
+        const Divider(),
+        const SizedBox(height: 8),
+        Text(
+          'Payment Details',
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.w700,
+            fontSize: 13,
+            color: cs.primary,
+          ),
+        ),
+        const SizedBox(height: 8),
+        _DetailRow(
+          icon: Icons.payments_outlined,
+          label: 'Payment Method',
+          value: apt.paymentMethod == 'online'
+              ? 'Online Payment (Safepay/PayFast)'
+              : apt.paymentMethod == 'card'
+                  ? 'Credit / Debit Card'
+                  : apt.paymentMethod == 'bank_transfer'
+                      ? 'Bank Transfer'
+                      : apt.paymentMethod == 'jazzcash'
+                          ? 'JazzCash'
+                          : apt.paymentMethod == 'easypaisa'
+                              ? 'EasyPaisa'
+                              : 'Pay at Clinic (Cash)',
+        ),
+        _DetailRow(
+          icon: Icons.monetization_on_outlined,
+          label: 'Fee Amount',
+          value:
+              'PKR ${NumberFormat('#,##0').format(apt.amount > 0 ? apt.amount : 5000)}',
+        ),
+        _DetailRow(
+          icon: apt.paymentStatus == 'paid'
+              ? Icons.check_circle_outline_rounded
+              : Icons.pending_actions_rounded,
+          label: 'Payment Status',
+          value: apt.paymentStatus.toUpperCase(),
+          trailing: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: apt.paymentStatus == 'paid'
+                  ? AppColors.statusConfirmed.withValues(alpha: 0.12)
+                  : Colors.orange.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: apt.paymentStatus == 'paid'
+                    ? AppColors.statusConfirmed.withValues(alpha: 0.3)
+                    : Colors.orange.withValues(alpha: 0.3),
+              ),
+            ),
+            child: Text(
+              apt.paymentStatus == 'paid' ? 'PAID ✓' : 'UNPAID (Pending)',
+              style: GoogleFonts.poppins(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: apt.paymentStatus == 'paid'
+                    ? AppColors.statusConfirmed
+                    : Colors.orange.shade800,
+              ),
+            ),
+          ),
+        ),
+        if (apt.paymentMethod == 'online' && apt.paymentStatus != 'paid') ...[
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () => _retryPayment(apt),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              icon: const Icon(Icons.credit_card_rounded, size: 18),
+              label: Text(
+                'Pay Online Now (Safepay / PayFast)',
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+          ),
+        ],
+        const SizedBox(height: 14),
         OutlinedButton.icon(
           onPressed: () => setState(() => _isEditing = true),
           icon: const Icon(Icons.edit_rounded, size: 18),
@@ -1185,6 +1331,7 @@ class _AppointmentDetailScreenState
   }
 
   Widget _buildEditForm() {
+    final cs = Theme.of(context).colorScheme;
     return Form(
       key: _formKey,
       child: Column(
@@ -1335,6 +1482,116 @@ class _AppointmentDetailScreenState
             ),
           ),
 
+          const SizedBox(height: 18),
+          const Divider(),
+          const SizedBox(height: 12),
+          Text(
+            'Payment Options',
+            style: GoogleFonts.poppins(
+              fontWeight: FontWeight.w700,
+              fontSize: 14,
+              color: cs.primary,
+            ),
+          ),
+          const SizedBox(height: 10),
+          DropdownButtonFormField<String>(
+            isExpanded: true,
+            initialValue: _paymentMethod,
+            decoration: const InputDecoration(
+              labelText: 'Payment Method',
+              prefixIcon: Icon(Icons.payment_rounded),
+            ),
+            items: const [
+              DropdownMenuItem(
+                value: 'cash',
+                child: Text('Pay at Clinic (Cash)'),
+              ),
+              DropdownMenuItem(
+                value: 'online',
+                child: Text('Online Payment (Safepay/PayFast)'),
+              ),
+              DropdownMenuItem(
+                value: 'card',
+                child: Text('Credit / Debit Card'),
+              ),
+              DropdownMenuItem(
+                value: 'bank_transfer',
+                child: Text('Bank Transfer'),
+              ),
+              DropdownMenuItem(
+                value: 'jazzcash',
+                child: Text('JazzCash'),
+              ),
+              DropdownMenuItem(
+                value: 'easypaisa',
+                child: Text('EasyPaisa'),
+              ),
+            ],
+            onChanged: (val) {
+              if (val != null) {
+                setState(() => _paymentMethod = val);
+              }
+            },
+          ),
+          const SizedBox(height: 10),
+          DropdownButtonFormField<String>(
+            isExpanded: true,
+            initialValue: _paymentStatus,
+            decoration: const InputDecoration(
+              labelText: 'Payment Status',
+              prefixIcon: Icon(Icons.price_check_rounded),
+            ),
+            items: const [
+              DropdownMenuItem(
+                value: 'pending',
+                child: Text('UNPAID / Pending'),
+              ),
+              DropdownMenuItem(
+                value: 'paid',
+                child: Text('PAID ✓'),
+              ),
+            ],
+            onChanged: (val) {
+              if (val != null) {
+                setState(() => _paymentStatus = val);
+              }
+            },
+          ),
+          const SizedBox(height: 10),
+          TextFormField(
+            controller: _amountController,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+              labelText: 'Treatment Fee / Amount (PKR)',
+              prefixIcon: Icon(Icons.attach_money_rounded),
+              suffixText: 'PKR',
+            ),
+          ),
+          if (_paymentMethod == 'online' && _paymentStatus != 'paid') ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () => _retryPayment(_appointment!),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                icon: const Icon(Icons.credit_card_rounded, size: 18),
+                label: Text(
+                  'Pay Online Now (Safepay / PayFast)',
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: 18),
           const Divider(),
           const SizedBox(height: 12),

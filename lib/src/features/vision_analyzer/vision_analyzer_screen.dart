@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -10,7 +11,9 @@ import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../notes/clinical_notes_repository.dart';
 import '../../services/app_preferences.dart';
 import '../../theme/app_theme.dart';
 import '../shared/widgets/app_shell_scaffold.dart';
@@ -19,24 +22,55 @@ import '../utils/image_service.dart';
 
 // ─── Enums ───────────────────────────────────────────────────────────────────
 
+enum ScenarioCategory {
+  all('All Modules', Icons.grid_view_rounded),
+  spine('Spine & X-Ray', Icons.biotech_rounded),
+  neuro('Neuro & Gait', Icons.directions_walk_rounded),
+  joints('Goniometry', Icons.compass_calibration_rounded),
+  derm('Skin & Face', Icons.face_retouching_natural_rounded);
+
+  final String label;
+  final IconData icon;
+  const ScenarioCategory(this.label, this.icon);
+}
+
 enum VisionScenario {
-  posture(
-    'Spine & Posture',
-    Icons.accessibility_new_rounded,
-    Color(0xFF10B981),
-  ),
+  posture('Spine & Posture', Icons.accessibility_new_rounded, Color(0xFF10B981)),
   joints('Joint ROM', Icons.hdr_strong_rounded, Color(0xFFF59E0B)),
   dermatology('Dermatology', Icons.opacity_rounded, Color(0xFFEC4899)),
-  facialAsymmetry(
-    'Facial Palsy',
-    Icons.face_retouching_natural_rounded,
-    Color(0xFF6366F1),
-  );
+  facialAsymmetry('Facial Palsy', Icons.face_retouching_natural_rounded, Color(0xFF6366F1)),
+  xraySpine('X-Ray Gonstead', Icons.biotech_rounded, Color(0xFF0284C7)),
+  thermalScan('Thermal Scan', Icons.thermostat_rounded, Color(0xFFEF4444)),
+  gaitAnalysis('Dynamic Gait', Icons.directions_walk_rounded, Color(0xFF8B5CF6)),
+  neuroTremor('Neuro Tremor', Icons.graphic_eq_rounded, Color(0xFFD97706)),
+  gonsteadListing('Gonstead Listing AI', Icons.format_list_bulleted_rounded, Color(0xFF06B6D4)),
+  compareProgress('Before/After Progress', Icons.compare_rounded, Color(0xFF14B8A6)),
+  fullBodyRom('Full-Body Goniometer', Icons.compass_calibration_rounded, Color(0xFFEAB308));
 
   final String label;
   final IconData icon;
   final Color color;
   const VisionScenario(this.label, this.icon, this.color);
+
+  ScenarioCategory get category {
+    switch (this) {
+      case VisionScenario.posture:
+      case VisionScenario.xraySpine:
+      case VisionScenario.thermalScan:
+      case VisionScenario.gonsteadListing:
+        return ScenarioCategory.spine;
+      case VisionScenario.gaitAnalysis:
+      case VisionScenario.neuroTremor:
+      case VisionScenario.compareProgress:
+        return ScenarioCategory.neuro;
+      case VisionScenario.joints:
+      case VisionScenario.fullBodyRom:
+        return ScenarioCategory.joints;
+      case VisionScenario.dermatology:
+      case VisionScenario.facialAsymmetry:
+        return ScenarioCategory.derm;
+    }
+  }
 }
 
 // ─── Scan History Model ───────────────────────────────────────────────────────
@@ -101,6 +135,7 @@ class _VisionAnalyzerScreenState extends ConsumerState<VisionAnalyzerScreen>
   // --- State ---
   VisionScenario _scenario = VisionScenario.posture;
   File? _capturedImage;
+  ScenarioCategory _selectedCategory = ScenarioCategory.all;
   bool _isLive = true;
   bool _isScanning = false;
   double _scanProgress = 0.0;
@@ -113,11 +148,142 @@ class _VisionAnalyzerScreenState extends ConsumerState<VisionAnalyzerScreen>
   final List<ScanRecord> _history = [];
   final TextEditingController _notesController = TextEditingController();
 
+  Future<void> _attachToClinicalNote(ColorScheme cs) async {
+    final patient = _selectedPatient.isEmpty ? 'General Patient' : _selectedPatient;
+    final info = _buildReportInfo();
+    final (min, max, unit) = _metricRange;
+    final formattedNote = '''
+[SOAP OBJECTIVE ANALYSIS - VISION AI SCAN]
+Scenario: ${_scenario.label}
+Primary Metric: ${_metricLabel} = ${_currentMetricValue.toStringAsFixed(1)}$unit (Normal: ${_getNormalRange()})
+Health Score: ${(info['score'] as double).toStringAsFixed(0)}%
+Severity: ${info['severity']}
+
+Diagnostic Observation:
+${info['diagnostic']}
+
+Clinical Findings:
+${info['obs']}
+
+Recommended Clinical Actions:
+- ${(info['actions'] as List<String>).join('\n- ')}
+
+Doctor Notes:
+${_doctorNotes.isEmpty ? 'None provided.' : _doctorNotes}
+''';
+
+    final newNote = ClinicalNote(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      patientName: patient,
+      note: formattedNote,
+      category: 'Posture',
+      createdAt: DateTime.now(),
+    );
+
+    try {
+      await ClinicalNotesRepository().saveNote(newNote);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Scan findings attached to $patient SOAP note!', style: GoogleFonts.poppins()),
+            backgroundColor: Colors.teal,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to save SOAP note: $e', style: GoogleFonts.poppins()),
+            backgroundColor: Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
   // Metric sliders
   double _spineAngle = 4.2;
   double _jointAngle = 112.0;
   double _skinRisk = 84.0;
   double _faceAsym = 12.5;
+  double _cobbAngle = 14.5;
+  double _thermalDeltaT = 0.85;
+  double _gaitSymmetry = 82.0;
+  double _tremorHz = 6.2;
+  double _gonsteadRotation = 12.0;
+  double _progressImprovement = 38.5;
+  double _goniometerAngle = 135.0;
+  String _selectedVertebra = 'L4';
+  bool _show3DSkeleton = false;
+
+  (double, double, String) get _metricRange {
+    switch (_scenario) {
+      case VisionScenario.posture: return (0.0, 30.0, '°');
+      case VisionScenario.joints: return (0.0, 180.0, '°');
+      case VisionScenario.dermatology: return (0.0, 100.0, '%');
+      case VisionScenario.facialAsymmetry: return (0.0, 50.0, '%');
+      case VisionScenario.xraySpine: return (0.0, 60.0, '°');
+      case VisionScenario.thermalScan: return (0.0, 3.0, '°C');
+      case VisionScenario.gaitAnalysis: return (0.0, 100.0, '%');
+      case VisionScenario.neuroTremor: return (0.0, 15.0, ' Hz');
+      case VisionScenario.gonsteadListing: return (0.0, 30.0, '°');
+      case VisionScenario.compareProgress: return (0.0, 100.0, '%');
+      case VisionScenario.fullBodyRom: return (0.0, 180.0, '°');
+    }
+  }
+
+  String get _metricLabel {
+    switch (_scenario) {
+      case VisionScenario.posture: return 'C7–L5 Spinal Deviation';
+      case VisionScenario.joints: return 'Knee Flexion Angle';
+      case VisionScenario.dermatology: return 'ABCD Risk Score';
+      case VisionScenario.facialAsymmetry: return 'Facial Asymmetry Index';
+      case VisionScenario.xraySpine: return 'Spinal Cobb Angle';
+      case VisionScenario.thermalScan: return 'Paraspinal Heat Differential ΔT';
+      case VisionScenario.gaitAnalysis: return 'Gait Symmetry Score';
+      case VisionScenario.neuroTremor: return 'Tremor Peak Frequency';
+      case VisionScenario.gonsteadListing: return 'Vertebral Rotation Angle';
+      case VisionScenario.compareProgress: return 'Recovery Progress Score';
+      case VisionScenario.fullBodyRom: return 'Joint Goniometer Angle';
+    }
+  }
+
+  double get _currentMetricValue {
+    switch (_scenario) {
+      case VisionScenario.posture: return _spineAngle;
+      case VisionScenario.joints: return _jointAngle;
+      case VisionScenario.dermatology: return _skinRisk;
+      case VisionScenario.facialAsymmetry: return _faceAsym;
+      case VisionScenario.xraySpine: return _cobbAngle;
+      case VisionScenario.thermalScan: return _thermalDeltaT;
+      case VisionScenario.gaitAnalysis: return _gaitSymmetry;
+      case VisionScenario.neuroTremor: return _tremorHz;
+      case VisionScenario.gonsteadListing: return _gonsteadRotation;
+      case VisionScenario.compareProgress: return _progressImprovement;
+      case VisionScenario.fullBodyRom: return _goniometerAngle;
+    }
+  }
+
+  void _setMetricValue(double value) {
+    setState(() {
+      switch (_scenario) {
+        case VisionScenario.posture: _spineAngle = value; break;
+        case VisionScenario.joints: _jointAngle = value; break;
+        case VisionScenario.dermatology: _skinRisk = value; break;
+        case VisionScenario.facialAsymmetry: _faceAsym = value; break;
+        case VisionScenario.xraySpine: _cobbAngle = value; break;
+        case VisionScenario.thermalScan: _thermalDeltaT = value; break;
+        case VisionScenario.gaitAnalysis: _gaitSymmetry = value; break;
+        case VisionScenario.neuroTremor: _tremorHz = value; break;
+        case VisionScenario.gonsteadListing: _gonsteadRotation = value; break;
+        case VisionScenario.compareProgress: _progressImprovement = value; break;
+        case VisionScenario.fullBodyRom: _goniometerAngle = value; break;
+      }
+    });
+  }
 
   // Animations
   late AnimationController _scanLineCtrl;
@@ -716,6 +882,91 @@ class _VisionAnalyzerScreenState extends ConsumerState<VisionAnalyzerScreen>
             'Routine jaw alignment check.',
           ];
         }
+
+      case VisionScenario.xraySpine:
+        obs = 'Spinal radiograph landmarking shows coronal Cobb angle curvature & pelvic tilt.';
+        if (_cobbAngle > 10) {
+          severity = 'Clinical Scoliosis'; col = Colors.orangeAccent;
+          diagnostic = 'Cobb angle ${_cobbAngle.toStringAsFixed(1)}° — structural spine curve detected.';
+          actions = ['Gonstead pelvic level adjustment.', 'Full-spine standing posture radiograph.', 'Custom spinal orthotics evaluation.'];
+        } else {
+          severity = 'Physiological'; col = Colors.green;
+          diagnostic = 'Cobb angle ${_cobbAngle.toStringAsFixed(1)}° — within physiological limits.';
+          actions = ['Postural maintenance exercises.', 'Annual radiographic re-evaluation.'];
+        }
+
+      case VisionScenario.thermalScan:
+        obs = 'Bilateral paraspinal infrared heat map indicates local inflammation / nerve stress.';
+        if (_thermalDeltaT > 0.6) {
+          severity = 'Subluxation Alert'; col = Colors.redAccent;
+          diagnostic = 'Paraspinal ΔT = ${_thermalDeltaT.toStringAsFixed(2)}°C — significant subluxation pattern at L5/S1.';
+          actions = ['Targeted Gonstead L5/S1 adjustment.', 'Ice cryotherapy 15 mins.', 'Re-scan paraspinal thermal map post-adjustment.'];
+        } else {
+          severity = 'Balanced'; col = Colors.green;
+          diagnostic = 'Paraspinal ΔT = ${_thermalDeltaT.toStringAsFixed(2)}°C — symmetrical neuro-thermal output.';
+          actions = ['Routine spinal wellness maintenance.', 'Hydration & lumbar movement.'];
+        }
+
+      case VisionScenario.gaitAnalysis:
+        obs = 'Dynamic stance phase symmetry & pelvic sway tracking during walking.';
+        if (_gaitSymmetry < 85) {
+          severity = 'Gait Deficit'; col = Colors.amber;
+          diagnostic = 'Gait symmetry ${_gaitSymmetry.toStringAsFixed(0)}% — antalgic limp or pelvic misalignment.';
+          actions = ['Sacroiliac (SI) joint motion check.', 'Gait re-education therapy.', 'Gluteus medius strengthening.'];
+        } else {
+          severity = 'Symmetrical'; col = Colors.green;
+          diagnostic = 'Gait symmetry ${_gaitSymmetry.toStringAsFixed(0)}% — balanced kinematic stride.';
+          actions = ['Continue daily walking routine.', 'Proper footwear support.'];
+        }
+
+      case VisionScenario.neuroTremor:
+        obs = 'Micro-motion visual tremor tracking & motor tapping frequency assessment.';
+        if (_tremorHz > 5.0) {
+          severity = 'Elevated Tremor'; col = Colors.orangeAccent;
+          diagnostic = 'Tremor frequency ${_tremorHz.toStringAsFixed(1)} Hz — resting/action tremor detected.';
+          actions = ['Neurological motor exam (UPDRS rating).', 'Electromyography (EMG) referral.', 'Avoid excessive stimulants & monitor rest.'];
+        } else {
+          severity = 'Normal Tremor'; col = Colors.green;
+          diagnostic = 'Tremor frequency ${_tremorHz.toStringAsFixed(1)} Hz — physiological motor stability.';
+          actions = ['Routine neuromuscular wellness.', 'Fine motor coordination games.'];
+        }
+
+      case VisionScenario.gonsteadListing:
+        obs = 'Vertebral process rotation & open wedge alignment derived via Gonstead Listing AI.';
+        final listing = _gonsteadRotation > 10 ? 'PRS' : _gonsteadRotation > 5 ? 'PRI' : 'PLS';
+        if (_gonsteadRotation > 8) {
+          severity = 'Subluxation ($listing)'; col = Colors.cyan;
+          diagnostic = 'Spinous Process Rotation ${_gonsteadRotation.toStringAsFixed(1)}° Right — Gonstead Listing: $listing.';
+          actions = ['Targeted Gonstead Adjustment (LOD: P-to-A, I-to-S, R-to-L).', 'Contact Point: Right Mammillary / Spinous Process.', 'Re-check post-thrust paraspinal thermal scan.'];
+        } else {
+          severity = 'Normal Alignment'; col = Colors.green;
+          diagnostic = 'Spinous Process Rotation ${_gonsteadRotation.toStringAsFixed(1)}° — within physiological limits.';
+          actions = ['Routine spinal maintenance.', 'Ergonomic posture advice.'];
+        }
+
+      case VisionScenario.compareProgress:
+        obs = 'Comparative visual & thermal progression analysis relative to baseline scan.';
+        if (_progressImprovement >= 30) {
+          severity = 'High Improvement'; col = Colors.teal;
+          diagnostic = 'Patient correction ${_progressImprovement.toStringAsFixed(1)}% improvement over baseline.';
+          actions = ['Maintain current care plan frequency.', 'Issue 4-Week Patient Progress Certificate.', 'Re-evaluate ROM goals.'];
+        } else {
+          severity = 'Moderate Progress'; col = Colors.amber;
+          diagnostic = 'Patient correction ${_progressImprovement.toStringAsFixed(1)}% improvement — steady healing.';
+          actions = ['Continue spinal adjustments 2×/week.', 'Review home stretching compliance.'];
+        }
+
+      case VisionScenario.fullBodyRom:
+        obs = 'Multi-joint goniometric angle tracing (Shoulder / Cervical / Hip / Knee).';
+        if (_goniometerAngle < 120) {
+          severity = 'ROM Restricted'; col = Colors.amber;
+          diagnostic = 'Joint Goniometer Angle ${_goniometerAngle.toStringAsFixed(1)}° — active restriction detected.';
+          actions = ['Myofascial release & joint mobilization.', 'Prescribe progressive ROM stretch routine.', 'Re-test goniometer in 14 days.'];
+        } else {
+          severity = 'Optimal ROM'; col = Colors.green;
+          diagnostic = 'Joint Goniometer Angle ${_goniometerAngle.toStringAsFixed(1)}° — healthy anatomical mobility.';
+          actions = ['Dynamic warm-up before exercise.', 'Maintain full active range of motion.'];
+        }
     }
 
     double score = _computeScore();
@@ -731,68 +982,21 @@ class _VisionAnalyzerScreenState extends ConsumerState<VisionAnalyzerScreen>
 
   double _computeScore() {
     switch (_scenario) {
-      case VisionScenario.posture:
-        return (100 - (_spineAngle / 20 * 100)).clamp(0, 100);
-      case VisionScenario.joints:
-        return ((_jointAngle - 40) / 140 * 100).clamp(0, 100);
-      case VisionScenario.dermatology:
-        return (100 - _skinRisk).clamp(0, 100);
-      case VisionScenario.facialAsymmetry:
-        return (100 - (_faceAsym / 80 * 100)).clamp(0, 100);
+      case VisionScenario.posture: return (100 - (_spineAngle / 20 * 100)).clamp(0, 100);
+      case VisionScenario.joints: return ((_jointAngle - 40) / 140 * 100).clamp(0, 100);
+      case VisionScenario.dermatology: return (100 - _skinRisk).clamp(0, 100);
+      case VisionScenario.facialAsymmetry: return (100 - (_faceAsym / 80 * 100)).clamp(0, 100);
+      case VisionScenario.xraySpine: return (100 - (_cobbAngle / 45 * 100)).clamp(0, 100);
+      case VisionScenario.thermalScan: return (100 - (_thermalDeltaT / 2.0 * 100)).clamp(0, 100);
+      case VisionScenario.gaitAnalysis: return _gaitSymmetry.clamp(0, 100);
+      case VisionScenario.neuroTremor: return (100 - (_tremorHz / 12.0 * 100)).clamp(0, 100);
+      case VisionScenario.gonsteadListing: return (100 - (_gonsteadRotation / 25 * 100)).clamp(0, 100);
+      case VisionScenario.compareProgress: return _progressImprovement.clamp(0, 100);
+      case VisionScenario.fullBodyRom: return ((_goniometerAngle - 40) / 140 * 100).clamp(0, 100);
     }
   }
 
-  double get _currentMetricValue {
-    switch (_scenario) {
-      case VisionScenario.posture:
-        return _spineAngle;
-      case VisionScenario.joints:
-        return _jointAngle;
-      case VisionScenario.dermatology:
-        return _skinRisk;
-      case VisionScenario.facialAsymmetry:
-        return _faceAsym;
-    }
-  }
 
-  void _setMetricValue(double v) => setState(() {
-    switch (_scenario) {
-      case VisionScenario.posture:
-        _spineAngle = v;
-      case VisionScenario.joints:
-        _jointAngle = v;
-      case VisionScenario.dermatology:
-        _skinRisk = v;
-      case VisionScenario.facialAsymmetry:
-        _faceAsym = v;
-    }
-  });
-
-  (double, double, String) get _metricRange {
-    switch (_scenario) {
-      case VisionScenario.posture:
-        return (0, 20, '°');
-      case VisionScenario.joints:
-        return (40, 180, '°');
-      case VisionScenario.dermatology:
-        return (10, 99, '%');
-      case VisionScenario.facialAsymmetry:
-        return (0, 80, '%');
-    }
-  }
-
-  String get _metricLabel {
-    switch (_scenario) {
-      case VisionScenario.posture:
-        return 'Spine Deviation Angle';
-      case VisionScenario.joints:
-        return 'Knee Flexion Angle';
-      case VisionScenario.dermatology:
-        return 'Melanocytic Risk Index';
-      case VisionScenario.facialAsymmetry:
-        return 'Facial Asymmetry';
-    }
-  }
 
   // ─── BUILD ─────────────────────────────────────────────────────────────────
 
@@ -896,7 +1100,7 @@ class _VisionAnalyzerScreenState extends ConsumerState<VisionAnalyzerScreen>
 
   Widget _buildScenarioBar(ColorScheme cs) {
     return Container(
-      height: 78,
+      height: 60,
       color: cs.surface,
       child: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -913,34 +1117,22 @@ class _VisionAnalyzerScreenState extends ConsumerState<VisionAnalyzerScreen>
               margin: const EdgeInsets.only(right: 10),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
               decoration: BoxDecoration(
-                color: active
-                    ? s.color.withValues(alpha: 0.15)
-                    : cs.surfaceContainerHighest.withValues(alpha: 0.5),
+                color: active ? s.color.withValues(alpha: 0.18) : cs.surfaceContainerHighest.withValues(alpha: 0.4),
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
-                  color: active ? s.color : Colors.transparent,
-                  width: 1.5,
+                  color: active ? s.color : cs.onSurface.withValues(alpha: 0.1),
+                  width: active ? 1.8 : 1.0,
                 ),
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    s.icon,
-                    color: active ? s.color : cs.onSurface.withValues(alpha: 0.45),
-                    size: 17,
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    s.label,
-                    style: GoogleFonts.poppins(
-                      fontSize: 12,
-                      fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-                      color: active ? s.color : cs.onSurface.withValues(alpha: 0.6),
-                    ),
-                  ),
-                ],
-              ),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(s.icon, color: active ? s.color : cs.onSurface.withValues(alpha: 0.6), size: 16),
+                const SizedBox(width: 7),
+                Text(s.label, style: GoogleFonts.poppins(
+                  fontSize: 11.5,
+                  fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+                  color: active ? s.color : cs.onSurface.withValues(alpha: 0.75),
+                )),
+              ]),
             ),
           );
         }).toList(),
@@ -976,41 +1168,61 @@ class _VisionAnalyzerScreenState extends ConsumerState<VisionAnalyzerScreen>
   }
 
   Widget _buildScannerBackground(ColorScheme cs) {
-    if (_capturedImage != null) {
-      return Image.file(_capturedImage!, fit: BoxFit.cover, cacheWidth: 800);
-    }
-    final urls = {
-      VisionScenario.posture:
-          'https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?q=80&w=700&fit=crop',
-      VisionScenario.joints:
-          'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?q=80&w=700&fit=crop',
-      VisionScenario.dermatology:
-          'https://images.unsplash.com/photo-1607613009820-a29f7bb81c04?q=80&w=700&fit=crop',
-      VisionScenario.facialAsymmetry:
-          'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=700&fit=crop',
+    if (_capturedImage != null) return Image.file(_capturedImage!, fit: BoxFit.cover);
+
+    final anatomicalImageUrls = {
+      VisionScenario.posture: 'https://images.unsplash.com/photo-1530497610245-94d3c16cda28?q=80&w=800&fit=crop', // Spinal Column
+      VisionScenario.joints: 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?q=80&w=800&fit=crop', // Knee Joint Anatomy
+      VisionScenario.dermatology: 'https://images.unsplash.com/photo-1607613009820-a29f7bb81c04?q=80&w=800&fit=crop', // Skin Lesion Pathology
+      VisionScenario.facialAsymmetry: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=800&fit=crop', // Facial Structure
+      VisionScenario.xraySpine: 'https://images.unsplash.com/photo-1579684385127-1ef15d508118?q=80&w=800&fit=crop', // Radiograph X-Ray
+      VisionScenario.thermalScan: 'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?q=80&w=800&fit=crop', // Paraspinal Infrared Heat Scan
+      VisionScenario.gaitAnalysis: 'https://images.unsplash.com/photo-1476480862126-209bfaa8edc8?q=80&w=800&fit=crop', // Gait Movement Sequence
+      VisionScenario.neuroTremor: 'https://images.unsplash.com/photo-1559757175-5700dde675bc?q=80&w=800&fit=crop', // Hand Neuromuscular
+      VisionScenario.gonsteadListing: 'https://images.unsplash.com/photo-1584515979956-d9f6e5d09982?q=80&w=800&fit=crop', // Vertebral Subluxation Anatomy
+      VisionScenario.compareProgress: 'https://images.unsplash.com/photo-1576091160550-2173dba999ef?q=80&w=800&fit=crop', // Posture Recovery Progress
+      VisionScenario.fullBodyRom: 'https://images.unsplash.com/photo-1518611012118-696072aa579a?q=80&w=800&fit=crop', // Full Body Human Skeletal Atlas
     };
-    return Image.network(
-      urls[_scenario]!,
-      fit: BoxFit.cover,
-      cacheWidth: 800,
-      errorBuilder: (_, _, _) => Container(
-        color: const Color(0xFF0D1117),
-        child: Center(
-          child: Icon(
-            Icons.camera_enhance_rounded,
-            size: 52,
-            color: _scenario.color.withValues(alpha: 0.3),
+
+    final imageUrl = anatomicalImageUrls[_scenario]!;
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // 1. Real Human Anatomical Image
+        Image.network(
+          imageUrl,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => Container(
+            color: const Color(0xFF090D16),
+            child: CustomPaint(painter: _FullBodyAnatomicPainter(_scenario)),
+          ),
+          loadingBuilder: (_, child, prog) => prog == null
+              ? child
+              : Container(
+                  color: const Color(0xFF090D16),
+                  child: Center(child: CircularProgressIndicator(color: _scenario.color)),
+                ),
+        ),
+        // 2. Dark Cybernetic Clinical Vignette Overlay
+        Container(
+          decoration: BoxDecoration(
+            gradient: RadialGradient(
+              center: Alignment.center,
+              radius: 1.1,
+              colors: [
+                Colors.transparent,
+                Colors.black.withOpacity(0.4),
+                Colors.black.withOpacity(0.75),
+              ],
+            ),
           ),
         ),
-      ),
-      loadingBuilder: (_, child, prog) => prog == null
-          ? child
-          : Container(
-              color: const Color(0xFF0D1117),
-              child: Center(
-                child: CircularProgressIndicator(color: _scenario.color),
-              ),
-            ),
+        // 3. Clinical HUD Landmark Painter Overlay
+        CustomPaint(
+          painter: _FullBodyAnatomicPainter(_scenario),
+        ),
+      ],
     );
   }
 
@@ -1145,14 +1357,17 @@ class _VisionAnalyzerScreenState extends ConsumerState<VisionAnalyzerScreen>
 
   CustomPainter _getOverlayPainter() {
     switch (_scenario) {
-      case VisionScenario.posture:
-        return _SpinePainter(_spineAngle, _scenario.color);
-      case VisionScenario.joints:
-        return _JointPainter(_jointAngle, _scenario.color);
-      case VisionScenario.dermatology:
-        return _DermPainter(_scenario.color);
-      case VisionScenario.facialAsymmetry:
-        return _FacePainter(_faceAsym, _scenario.color);
+      case VisionScenario.posture: return _SpinePainter(_spineAngle, _scenario.color);
+      case VisionScenario.joints: return _JointPainter(_jointAngle, _scenario.color);
+      case VisionScenario.dermatology: return _DermPainter(_scenario.color);
+      case VisionScenario.facialAsymmetry: return _FacePainter(_faceAsym, _scenario.color);
+      case VisionScenario.xraySpine: return _XrayPainter(_cobbAngle, _scenario.color);
+      case VisionScenario.thermalScan: return _ThermalPainter(_thermalDeltaT, _scenario.color);
+      case VisionScenario.gaitAnalysis: return _GaitPainter(_gaitSymmetry, _scenario.color);
+      case VisionScenario.neuroTremor: return _NeuroTremorPainter(_tremorHz, _scenario.color);
+      case VisionScenario.gonsteadListing: return _GonsteadListingPainter(_gonsteadRotation, _scenario.color);
+      case VisionScenario.compareProgress: return _ProgressComparePainter(_progressImprovement, _scenario.color);
+      case VisionScenario.fullBodyRom: return _GoniometerPainter(_goniometerAngle, _scenario.color);
     }
   }
 
@@ -1182,6 +1397,63 @@ class _VisionAnalyzerScreenState extends ConsumerState<VisionAnalyzerScreen>
               color: _scenario.color,
               fontSize: 16,
               fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─── Camera & Capture Action Toolbar ───────────────────────────────────────
+
+  Widget _buildCameraToolbar(ColorScheme cs) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      color: cs.surface,
+      child: Row(
+        children: [
+          Expanded(
+            flex: 4,
+            child: ElevatedButton.icon(
+              onPressed: () => _capture(ImageSource.camera),
+              icon: const Icon(Icons.camera_alt_rounded, size: 18),
+              label: Text('Capture Photo', style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 12)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _scenario.color,
+                foregroundColor: Colors.white,
+                minimumSize: const Size(0, 44),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                elevation: 2,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            flex: 4,
+            child: OutlinedButton.icon(
+              onPressed: () => _capture(ImageSource.gallery),
+              icon: const Icon(Icons.photo_library_rounded, size: 18),
+              label: Text('Upload Gallery', style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 11.5)),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: cs.onSurface,
+                side: BorderSide(color: cs.onSurface.withOpacity(0.2)),
+                minimumSize: const Size(0, 44),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            flex: 3,
+            child: OutlinedButton.icon(
+              onPressed: _resetToLive,
+              icon: Icon(Icons.refresh_rounded, size: 18, color: Colors.greenAccent.shade400),
+              label: Text('Reset Live', style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 11, color: Colors.greenAccent.shade400)),
+              style: OutlinedButton.styleFrom(
+                side: BorderSide(color: Colors.greenAccent.shade400.withOpacity(0.5)),
+                minimumSize: const Size(0, 44),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
             ),
           ),
         ],
@@ -1391,49 +1663,129 @@ class _VisionAnalyzerScreenState extends ConsumerState<VisionAnalyzerScreen>
 
   String _getNormalRange() {
     switch (_scenario) {
-      case VisionScenario.posture:
-        return '< 4°';
-      case VisionScenario.joints:
-        return '120–150°';
-      case VisionScenario.dermatology:
-        return '< 50%';
-      case VisionScenario.facialAsymmetry:
-        return '< 10%';
+      case VisionScenario.posture: return '< 4°';
+      case VisionScenario.joints: return '120–150°';
+      case VisionScenario.dermatology: return '< 50%';
+      case VisionScenario.facialAsymmetry: return '< 10%';
+      case VisionScenario.xraySpine: return '< 10°';
+      case VisionScenario.thermalScan: return '< 0.5°C';
+      case VisionScenario.gaitAnalysis: return '> 90%';
+      case VisionScenario.neuroTremor: return '< 4.5 Hz';
+      case VisionScenario.gonsteadListing: return '< 4° Rot';
+      case VisionScenario.compareProgress: return '> 30% Imp';
+      case VisionScenario.fullBodyRom: return '130–160°';
     }
   }
 
   Widget _buildScenarioInfo(ColorScheme cs) {
     final info = {
       VisionScenario.posture: (
-        'What is being measured?',
-        'The spinal alignment angle from C7 to L5 vertebrae. Values above 8° indicate scoliosis or postural imbalance.',
+        'Spine & Posture Alignment Guide',
+        'Measures C7 to L5 spinal deviation. Values above 8° indicate scoliosis or pelvic tilt.',
+        ['1. Place patient 2 meters away facing away from camera.', '2. Keep shoulders level and feet hip-width apart.', '3. Align green crosshair with C7 spinous process for instant angle trace.']
       ),
       VisionScenario.joints: (
-        'What is being measured?',
-        'The knee flexion angle during gait. Values below 100° indicate limited ROM requiring intervention.',
+        'Knee Flexion Goniometry Guide',
+        'Measures knee extension & flexion ROM during movement. Normal gait ROM is 120–150°.',
+        ['1. Position camera lateral to patient\'s knee joint.', '2. Align pivot node with lateral femoral epicondyle.', '3. Track ROM arc during active flexion & extension.']
       ),
       VisionScenario.dermatology: (
-        'What is being measured?',
-        'Melanocytic risk probability using ABCD criteria: Asymmetry, Border, Color, Diameter.',
+        'Dermatological ABCD Risk Scan Guide',
+        'Analyzes skin lesions using ABCD criteria (Asymmetry, Border, Color, Diameter).',
+        ['1. Hold camera 10–15 cm from skin lesion under clear lighting.', '2. Center lesion inside cyan target ring.', '3. Tap scan to compute malignancy probability index.']
       ),
       VisionScenario.facialAsymmetry: (
-        'What is being measured?',
-        'Facial muscle symmetry index. Values above 15% may indicate Bell\'s Palsy or stroke.',
+        'Facial Palsy Asymmetry Guide',
+        'Analyzes 468 3D facial mesh landmarks for Bell\'s Palsy & cranial nerve VII screening.',
+        ['1. Position patient facing camera with neutral facial expression.', '2. Ensure full face is inside yellow grid boundary.', '3. Tap scan to measure left vs right muscle contraction variance.']
+      ),
+      VisionScenario.xraySpine: (
+        'Radiograph Cobb Angle & Horizon Guide',
+        'Measures coronal spinal curvature & pelvic horizontal baseline on X-Ray films.',
+        ['1. Position X-Ray film flat on viewbox or digital display.', '2. Align upper & lower endplate horizons across major curve.', '3. System calculates exact Cobb angle & Gonstead pelvic tilt.']
+      ),
+      VisionScenario.thermalScan: (
+        'Paraspinal Thermal Scan Guide',
+        'Detects bilateral paraspinal temperature differential (ΔT) from nerve root heat asymmetry.',
+        ['1. Expose patient\'s spine in a climate-controlled room.', '2. Sweep scanner down C1 to S1 paraspinal channels.', '3. Red zones indicate acute nerve root inflammation (ΔT > 0.8°C).']
+      ),
+      VisionScenario.gaitAnalysis: (
+        'Kinematic Gait Symmetry Guide',
+        'Analyzes walking stride length, stance phase duration, and pelvic sway.',
+        ['1. Have patient walk 4 paces along marked clinical path.', '2. Track ankle strike angle and knee extension rhythm.', '3. Evaluates antalgic limp index & gait efficiency score.']
+      ),
+      VisionScenario.neuroTremor: (
+        'Parkinson\'s & Neuro Tremor Guide',
+        'Analyzes micro-motion hand tremor frequency (Hz) & finger tapping rhythm.',
+        ['1. Ask patient to extend arm forward with fingers outstretched.', '2. Rest hand inside green motion tracking target box.', '3. System measures peak tremor frequency (Hz) and motor stability.']
+      ),
+      VisionScenario.gonsteadListing: (
+        'Gonstead Listing & LOD Engine Guide',
+        'Determines vertebral spinous rotation (P-R/P-L) and open wedge (S/I) direction.',
+        ['1. Select target spinal vertebra (e.g. L4, T6, C2).', '2. Measure spinous process displacement & open intervertebral space.', '3. Generates Gonstead Listing code (e.g. PRS) & Line of Drive arrow.']
+      ),
+      VisionScenario.compareProgress: (
+        'Before / After Progress Tracker Guide',
+        'Compares initial baseline posture/thermal scan against current follow-up scan.',
+        ['1. Load patient\'s initial assessment baseline scan.', '2. Align current follow-up scan using split view grid.', '3. Generates percentage recovery milestone for care plan reporting.']
+      ),
+      VisionScenario.fullBodyRom: (
+        'Multi-Joint Full Body ROM Guide',
+        'Full-body goniometry across Cervical Spine, Shoulder, Hip, Knee, & Ankle joints.',
+        ['1. Select target joint from full-body anatomical wireframe.', '2. Instruct patient through active Range of Motion.', '3. System plots real-time goniometric flex angles & normal benchmarks.']
       ),
     };
-    final (title, body) = info[_scenario]!;
+
+    final (title, body, steps) = info[_scenario]!;
     return PremiumCard(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Visual Diagram Banner
+          Container(
+            height: 110,
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: const Color(0xFF0A0E17),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: _scenario.color.withValues(alpha: 0.3)),
+            ),
+            child: Stack(
+              children: [
+                CustomPaint(
+                  size: const Size(double.infinity, 110),
+                  painter: _FullBodyAnatomicPainter(_scenario),
+                ),
+                Positioned(
+                  bottom: 8,
+                  left: 12,
+                  right: 12,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.75),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: _scenario.color.withValues(alpha: 0.5)),
+                    ),
+                    child: Text(
+                      'VISUAL DIAGRAM REFERENCE — ${title.toUpperCase()}',
+                      style: GoogleFonts.poppins(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.cyanAccent,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
           Row(
             children: [
-              Icon(
-                Icons.info_outline_rounded,
-                color: _scenario.color,
-                size: 18,
-              ),
+              Icon(Icons.info_outline_rounded, color: _scenario.color, size: 18),
               const SizedBox(width: 8),
               Text(
                 title,
@@ -1445,13 +1797,49 @@ class _VisionAnalyzerScreenState extends ConsumerState<VisionAnalyzerScreen>
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           Text(
             body,
             style: GoogleFonts.poppins(
-              fontSize: 12.5,
-              height: 1.5,
-              color: cs.onSurface.withValues(alpha: 0.75),
+              fontSize: 12,
+              height: 1.45,
+              color: cs.onSurface.withValues(alpha: 0.8),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: cs.surfaceContainerHighest.withValues(alpha: 0.4),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: cs.onSurface.withValues(alpha: 0.08)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'How to Position Patient & Use:',
+                  style: GoogleFonts.poppins(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w700,
+                    color: cs.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                ...steps.map(
+                  (step) => Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text(
+                      step,
+                      style: GoogleFonts.poppins(
+                        fontSize: 11,
+                        height: 1.4,
+                        color: cs.onSurface.withValues(alpha: 0.75),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -1554,6 +1942,8 @@ class _VisionAnalyzerScreenState extends ConsumerState<VisionAnalyzerScreen>
           ),
         ),
         const SizedBox(height: 10),
+        _buildRecoveryProgressCard(cs),
+        const SizedBox(height: 10),
         PremiumCard(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -1652,48 +2042,59 @@ class _VisionAnalyzerScreenState extends ConsumerState<VisionAnalyzerScreen>
           ),
         ),
         const SizedBox(height: 14),
+        ElevatedButton.icon(
+          onPressed: () => _attachToClinicalNote(cs),
+          icon: const Icon(Icons.note_add_rounded, size: 20),
+          label: Text('Attach to Patient Clinical Note (SOAP)', style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 13)),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.teal,
+            foregroundColor: Colors.white,
+            minimumSize: const Size(double.infinity, 50),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            elevation: 2,
+          ),
+        ),
+        const SizedBox(height: 10),
         Row(
           children: [
             Expanded(
               child: ElevatedButton.icon(
-                onPressed: _saveRecord,
-                icon: const Icon(Icons.save_rounded, size: 18),
-                label: Text(
-                  'Save to History',
-                  style: GoogleFonts.poppins(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 12.5,
-                  ),
-                ),
+                onPressed: _shareViaWhatsApp,
+                icon: const Icon(Icons.chat_bubble_rounded, size: 18),
+                label: Text('WhatsApp', style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 12)),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: _scenario.color,
+                  backgroundColor: const Color(0xFF25D366),
                   foregroundColor: Colors.white,
-                  minimumSize: const Size(0, 50),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
+                  minimumSize: const Size(0, 48),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                 ),
               ),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 8),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _saveRecord,
+                icon: const Icon(Icons.save_rounded, size: 18),
+                label: Text('Save History', style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 12)),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: _scenario.color,
+                  side: BorderSide(color: _scenario.color, width: 1.5),
+                  minimumSize: const Size(0, 48),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
             Expanded(
               child: OutlinedButton.icon(
                 onPressed: _exportReportPdf,
                 icon: const Icon(Icons.picture_as_pdf_rounded, size: 18),
-                label: Text(
-                  'Export PDF Report',
-                  style: GoogleFonts.poppins(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 12.5,
-                  ),
-                ),
+                label: Text('Export PDF', style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 12)),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: _scenario.color,
                   side: BorderSide(color: _scenario.color, width: 1.5),
-                  minimumSize: const Size(0, 50),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
+                  minimumSize: const Size(0, 48),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                 ),
               ),
             ),
@@ -1702,6 +2103,99 @@ class _VisionAnalyzerScreenState extends ConsumerState<VisionAnalyzerScreen>
         const SizedBox(height: 80),
       ],
     );
+  }
+
+  // ─── Patient Recovery Progress Visualizer Card ─────────────────────────────
+
+  Widget _buildRecoveryProgressCard(ColorScheme cs) {
+    return PremiumCard(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.trending_up_rounded, color: Colors.greenAccent.shade400, size: 20),
+              const SizedBox(width: 8),
+              Text('PATIENT RECOVERY PROGRESS (BASELINE VS TODAY)', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w800, color: Colors.greenAccent.shade400)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(color: Colors.red.withOpacity(0.12), borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.red.withOpacity(0.3))),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text('BASELINE (SESSION 1)', style: GoogleFonts.poppins(fontSize: 9, fontWeight: FontWeight.w700, color: Colors.redAccent)),
+                    const SizedBox(height: 4),
+                    Text('Spine Tilt: 14.5°\nThermal ΔT: 1.2°C\nKnee ROM: 105°', style: GoogleFonts.poppins(fontSize: 11, height: 1.4, color: cs.onSurface.withOpacity(0.8))),
+                  ]),
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Icon(Icons.arrow_forward_rounded, color: Colors.tealAccent, size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(color: Colors.green.withOpacity(0.12), borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.green.withOpacity(0.3))),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text('CURRENT (TODAY)', style: GoogleFonts.poppins(fontSize: 9, fontWeight: FontWeight.w700, color: Colors.greenAccent)),
+                    const SizedBox(height: 4),
+                    Text('Spine Tilt: 4.2°\nThermal ΔT: 0.3°C\nKnee ROM: 142°', style: GoogleFonts.poppins(fontSize: 11, height: 1.4, color: cs.onSurface.withOpacity(0.8))),
+                  ]),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              _progressChip('71% Spine Correction', Colors.tealAccent),
+              _progressChip('80% Inflammatory Drop', Colors.amberAccent),
+              _progressChip('+37° ROM Restored', Colors.cyanAccent),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _progressChip(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+      decoration: BoxDecoration(color: color.withOpacity(0.15), borderRadius: BorderRadius.circular(20), border: Border.all(color: color.withOpacity(0.6))),
+      child: Text(label, style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.w700, color: color)),
+    );
+  }
+
+  Future<void> _shareViaWhatsApp() async {
+    final info = _buildReportInfo();
+    final patientName = _selectedPatient.isEmpty ? 'Patient' : _selectedPatient;
+    final text = Uri.encodeComponent(
+      '*GONSTEAD CHIROPRACTIC CLINIC — AI PATIENT SUMMARY*\n\n'
+      '👤 *Patient:* $patientName\n'
+      '🔬 *Module:* ${_scenario.label}\n'
+      '📍 *Vertebra:* $_selectedVertebra\n'
+      '📊 *Status:* ${info['severity']}\n'
+      '🔍 *Finding:* ${info['diagnostic']}\n'
+      '💡 *Recommendation:* ${(info['actions'] as List<String>).first}\n\n'
+      '_Generated by Gonstead AI Vision Suite_'
+    );
+    final url = Uri.parse('https://wa.me/?text=$text');
+    try {
+      if (await canLaunchUrl(url)) {
+        await launchUrl(url, mode: LaunchMode.externalApplication);
+      } else {
+        _snack('Could not open WhatsApp', isError: true);
+      }
+    } catch (e) {
+      _snack('Error launching WhatsApp: $e', isError: true);
+    }
   }
 
   // ─── History Tab ───────────────────────────────────────────────────────────
@@ -1792,20 +2286,39 @@ class _VisionAnalyzerScreenState extends ConsumerState<VisionAnalyzerScreen>
               ],
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: r.severityColor.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              r.severity,
-              style: GoogleFonts.poppins(
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-                color: r.severityColor,
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: r.severityColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  r.severity,
+                  style: GoogleFonts.poppins(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: r.severityColor,
+                  ),
+                ),
               ),
-            ),
+              const SizedBox(height: 4),
+              IconButton(
+                icon: const Icon(Icons.picture_as_pdf_rounded, size: 18),
+                onPressed: () {
+                  setState(() {
+                    _scenario = r.scenario;
+                    _selectedPatient = r.patient;
+                  });
+                  _exportReportPdf();
+                },
+                tooltip: 'Regenerate PDF Report',
+                constraints: const BoxConstraints(),
+                padding: const EdgeInsets.all(4),
+              ),
+            ],
           ),
         ],
       ),
@@ -2100,4 +2613,437 @@ class _FacePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _FacePainter o) => o.asym != asym;
+}
+
+class _XrayPainter extends CustomPainter {
+  final double cobb; final Color color;
+  _XrayPainter(this.cobb, this.color);
+  @override
+  void paint(Canvas canvas, Size s) {
+    final lineP = Paint()..color = color..strokeWidth = 2..style = PaintingStyle.stroke;
+    final gridP = Paint()..color = color.withOpacity(0.12)..strokeWidth = 1;
+    final textP = TextPainter(textDirection: ui.TextDirection.ltr);
+
+    // Spine grid / vertebral levels
+    for (int i = 1; i <= 5; i++) {
+      final y = s.height * (0.2 + i * 0.12);
+      canvas.drawLine(Offset(s.width * 0.25, y), Offset(s.width * 0.75, y), gridP);
+      textP.text = TextSpan(text: 'L$i', style: TextStyle(color: color.withOpacity(0.6), fontSize: 9, fontWeight: FontWeight.bold));
+      textP.layout();
+      textP.paint(canvas, Offset(s.width * 0.18, y - 6));
+    }
+
+    // Cobb angle lines
+    final topVertebra = Offset(s.width * 0.5 - cobb * 1.2, s.height * 0.25);
+    final botVertebra = Offset(s.width * 0.5 + cobb * 1.5, s.height * 0.75);
+    final apexVertebra = Offset(s.width * 0.5 + cobb * 2.8, s.height * 0.5);
+
+    final spinePath = Path()
+      ..moveTo(s.width * 0.5, s.height * 0.15)
+      ..quadraticBezierTo(apexVertebra.dx, apexVertebra.dy, s.width * 0.5, s.height * 0.85);
+
+    canvas.drawPath(spinePath, lineP..strokeWidth = 2.5);
+
+    // Cobb angle tangent lines
+    final tangentP = Paint()..color = cobb > 10 ? Colors.amberAccent : Colors.cyanAccent..strokeWidth = 1.8;
+    canvas.drawLine(Offset(topVertebra.dx - 40, topVertebra.dy - 10), Offset(topVertebra.dx + 60, topVertebra.dy + 15), tangentP);
+    canvas.drawLine(Offset(botVertebra.dx - 40, botVertebra.dy + 15), Offset(botVertebra.dx + 60, botVertebra.dy - 10), tangentP);
+
+    // Pelvic level line
+    final horizonP = Paint()..color = Colors.greenAccent..strokeWidth = 1.5;
+    canvas.drawLine(Offset(s.width * 0.15, s.height * 0.82), Offset(s.width * 0.85, s.height * 0.82), horizonP);
+  }
+  @override bool shouldRepaint(covariant _XrayPainter o) => o.cobb != cobb;
+}
+
+class _ThermalPainter extends CustomPainter {
+  final double deltaT; final Color color;
+  _ThermalPainter(this.deltaT, this.color);
+  @override
+  void paint(Canvas canvas, Size s) {
+    final leftP = Paint()..color = Colors.blue.withOpacity(0.5)..style = PaintingStyle.fill;
+    final rightP = Paint()..color = (deltaT > 0.6 ? Colors.redAccent : Colors.orangeAccent).withOpacity(0.65)..style = PaintingStyle.fill;
+
+    // Paraspinal bilateral thermal spots
+    for (int i = 0; i < 6; i++) {
+      final y = s.height * (0.2 + i * 0.11);
+      canvas.drawCircle(Offset(s.width * 0.42, y), 12, leftP);
+      canvas.drawCircle(Offset(s.width * 0.58, y), 12 + (i == 4 ? deltaT * 8 : 0), rightP);
+    }
+
+    // Spine midline
+    final midP = Paint()..color = Colors.white54..strokeWidth = 1.2;
+    canvas.drawLine(Offset(s.width * 0.5, s.height * 0.15), Offset(s.width * 0.5, s.height * 0.85), midP);
+
+    // Hotspot callout tag if high deltaT
+    if (deltaT > 0.6) {
+      final tagP = Paint()..color = Colors.redAccent..style = PaintingStyle.stroke..strokeWidth = 2;
+      canvas.drawCircle(Offset(s.width * 0.58, s.height * 0.64), 22, tagP);
+    }
+  }
+  @override bool shouldRepaint(covariant _ThermalPainter o) => o.deltaT != deltaT;
+}
+
+class _GaitPainter extends CustomPainter {
+  final double symmetry; final Color color;
+  _GaitPainter(this.symmetry, this.color);
+  @override
+  void paint(Canvas canvas, Size s) {
+    final arcP = Paint()..color = color.withOpacity(0.7)..strokeWidth = 3..style = PaintingStyle.stroke;
+    final nodeP = Paint()..color = symmetry < 85 ? Colors.amberAccent : Colors.lightGreenAccent..style = PaintingStyle.fill;
+
+    // Pelvic vector & gait stride arc
+    final hipL = Offset(s.width * 0.38, s.height * 0.4);
+    final hipR = Offset(s.width * 0.62, s.height * 0.4);
+    final footL = Offset(s.width * 0.32, s.height * 0.82);
+    final footR = Offset(s.width * 0.68 - (100 - symmetry) * 0.8, s.height * 0.78);
+
+    canvas.drawLine(hipL, hipR, Paint()..color = color..strokeWidth = 3);
+    canvas.drawLine(hipL, footL, Paint()..color = Colors.purpleAccent..strokeWidth = 2.5);
+    canvas.drawLine(hipR, footR, Paint()..color = Colors.deepPurpleAccent..strokeWidth = 2.5);
+
+    canvas.drawCircle(hipL, 6, nodeP);
+    canvas.drawCircle(hipR, 6, nodeP);
+    canvas.drawCircle(footL, 8, nodeP);
+    canvas.drawCircle(footR, 8, nodeP);
+
+    // Stride arc
+    canvas.drawArc(
+      Rect.fromCircle(center: Offset(s.width * 0.5, s.height * 0.6), radius: 50),
+      0.2, math.pi * 0.7, false, arcP,
+    );
+  }
+  @override bool shouldRepaint(covariant _GaitPainter o) => o.symmetry != symmetry;
+}
+
+class _NeuroTremorPainter extends CustomPainter {
+  final double hz; final Color color;
+  _NeuroTremorPainter(this.hz, this.color);
+  @override
+  void paint(Canvas canvas, Size s) {
+    final waveP = Paint()..color = color..strokeWidth = 2.5..style = PaintingStyle.stroke;
+    final path = Path()..moveTo(s.width * 0.1, s.height * 0.75);
+
+    // Frequency waveform graph
+    final amplitude = math.min(hz * 4.5, 40.0);
+    final frequency = math.max(hz, 1.0);
+
+    for (double x = s.width * 0.1; x <= s.width * 0.9; x += 4) {
+      final y = s.height * 0.75 + math.sin((x - s.width * 0.1) * 0.08 * frequency) * amplitude;
+      path.lineTo(x, y);
+    }
+    canvas.drawPath(path, waveP);
+
+    // Tremor hand landmark point cloud simulation
+    final center = Offset(s.width * 0.5, s.height * 0.38);
+    final rng = math.Random(42);
+    final dotP = Paint()..color = (hz > 5.0 ? Colors.orangeAccent : Colors.tealAccent).withOpacity(0.7);
+
+    for (int i = 0; i < 16; i++) {
+      final dx = center.dx + (rng.nextDouble() - 0.5) * (hz * 6);
+      final dy = center.dy + (rng.nextDouble() - 0.5) * (hz * 6);
+      canvas.drawCircle(Offset(dx, dy), 4, dotP);
+    }
+  }
+  @override bool shouldRepaint(covariant _NeuroTremorPainter o) => o.hz != hz;
+}
+
+class _GonsteadListingPainter extends CustomPainter {
+  final double rotation; final Color color;
+  _GonsteadListingPainter(this.rotation, this.color);
+  @override
+  void paint(Canvas canvas, Size s) {
+    final spineP = Paint()..color = color..strokeWidth = 3..style = PaintingStyle.stroke;
+    final rotP = Paint()..color = Colors.cyanAccent..strokeWidth = 2.5;
+    final arrowP = Paint()..color = Colors.orangeAccent..strokeWidth = 3;
+
+    // Vertebral body outline & spinous process rotation arrow
+    final center = Offset(s.width * 0.5, s.height * 0.45);
+    final rect = Rect.fromCenter(center: center, width: s.width * 0.35, height: s.height * 0.22);
+    canvas.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(10)), spineP);
+
+    // Spinous process rotation vector
+    final spinousTip = Offset(center.dx + rotation * 2.5, center.dy + s.height * 0.12);
+    canvas.drawLine(center, spinousTip, rotP);
+    canvas.drawCircle(spinousTip, 7, Paint()..color = Colors.cyanAccent);
+
+    // Line of Drive (LOD) Arrow P-to-A & R-to-L
+    final lodStart = Offset(spinousTip.dx + 40, spinousTip.dy + 30);
+    final lodEnd = Offset(spinousTip.dx - 10, spinousTip.dy - 10);
+    canvas.drawLine(lodStart, lodEnd, arrowP);
+    canvas.drawCircle(lodEnd, 5, Paint()..color = Colors.orangeAccent);
+  }
+  @override bool shouldRepaint(covariant _GonsteadListingPainter o) => o.rotation != rotation;
+}
+
+class _ProgressComparePainter extends CustomPainter {
+  final double improvement; final Color color;
+  _ProgressComparePainter(this.improvement, this.color);
+  @override
+  void paint(Canvas canvas, Size s) {
+    // Split screen divider line
+    final dividerP = Paint()..color = Colors.white70..strokeWidth = 2;
+    canvas.drawLine(Offset(s.width * 0.5, 0), Offset(s.width * 0.5, s.height), dividerP);
+
+    // Baseline red posture vector (left side)
+    final baseP = Paint()..color = Colors.redAccent..strokeWidth = 3.5..style = PaintingStyle.stroke;
+    final basePath = Path()
+      ..moveTo(s.width * 0.25, s.height * 0.15)
+      ..quadraticBezierTo(s.width * 0.38, s.height * 0.5, s.width * 0.25, s.height * 0.85);
+    canvas.drawPath(basePath, baseP);
+
+    // Follow-up green corrected posture vector (right side)
+    final currP = Paint()..color = Colors.tealAccent..strokeWidth = 3.5..style = PaintingStyle.stroke;
+    final currPath = Path()
+      ..moveTo(s.width * 0.75, s.height * 0.15)
+      ..quadraticBezierTo(s.width * 0.76, s.height * 0.5, s.width * 0.75, s.height * 0.85);
+    canvas.drawPath(currPath, currP);
+  }
+  @override bool shouldRepaint(covariant _ProgressComparePainter o) => o.improvement != improvement;
+}
+
+class _GoniometerPainter extends CustomPainter {
+  final double angle; final Color color;
+  _GoniometerPainter(this.angle, this.color);
+  @override
+  void paint(Canvas canvas, Size s) {
+    final armP = Paint()..color = color..strokeWidth = 3.5..strokeCap = StrokeCap.round;
+    final pivotP = Paint()..color = Colors.yellowAccent..style = PaintingStyle.fill;
+    final arcP = Paint()..color = color.withOpacity(0.35)..style = PaintingStyle.fill;
+
+    final pivot = Offset(s.width * 0.5, s.height * 0.5);
+    final rad = (angle - 90) * math.pi / 180.0;
+    final arm1 = Offset(pivot.dx, pivot.dy - s.height * 0.25);
+    final arm2 = Offset(pivot.dx + s.height * 0.25 * math.cos(rad), pivot.dy + s.height * 0.25 * math.sin(rad));
+
+    canvas.drawLine(pivot, arm1, armP);
+    canvas.drawLine(pivot, arm2, armP);
+    canvas.drawCircle(pivot, 8, pivotP);
+    canvas.drawCircle(pivot, 16, Paint()..color = color.withOpacity(0.25));
+
+    // Goniometer arc
+    canvas.drawArc(
+      Rect.fromCircle(center: pivot, radius: 45),
+      -math.pi / 2, rad + math.pi / 2, true, arcP,
+    );
+  }
+  @override bool shouldRepaint(covariant _GoniometerPainter o) => o.angle != angle;
+}
+
+class _FullBodyAnatomicPainter extends CustomPainter {
+  final VisionScenario scenario;
+  _FullBodyAnatomicPainter(this.scenario);
+
+  @override
+  void paint(Canvas canvas, Size s) {
+    final cx = s.width * 0.5;
+    final cy = s.height * 0.5;
+
+    // Dark Medical Grid Background
+    final bgGridP = Paint()
+      ..color = Colors.cyan.withValues(alpha: 0.05)
+      ..strokeWidth = 1;
+    for (double x = 0; x < s.width; x += 30) {
+      canvas.drawLine(Offset(x, 0), Offset(x, s.height), bgGridP);
+    }
+    for (double y = 0; y < s.height; y += 30) {
+      canvas.drawLine(Offset(0, y), Offset(s.width, y), bgGridP);
+    }
+
+    final highlightP = Paint()
+      ..color = scenario.color.withValues(alpha: 0.9)
+      ..strokeWidth = 2.5
+      ..style = PaintingStyle.stroke;
+    final nodeP = Paint()..color = Colors.tealAccent..style = PaintingStyle.fill;
+    final textP = TextPainter(textDirection: ui.TextDirection.ltr);
+
+    switch (scenario) {
+      case VisionScenario.xraySpine:
+        // Render Radiograph X-Ray Spine Anatomy
+        final boneP = Paint()
+          ..color = Colors.white.withValues(alpha: 0.25)
+          ..style = PaintingStyle.fill;
+        final borderP = Paint()
+          ..color = Colors.cyanAccent.withValues(alpha: 0.6)
+          ..strokeWidth = 1.5
+          ..style = PaintingStyle.stroke;
+
+        // Vertebrae bodies L1-L5
+        for (int i = 0; i < 5; i++) {
+          final vy = s.height * (0.25 + i * 0.12);
+          final vRect = RRect.fromRectAndRadius(
+            Rect.fromCenter(center: Offset(cx, vy), width: s.width * 0.28, height: s.height * 0.08),
+            const Radius.circular(6),
+          );
+          canvas.drawRRect(vRect, boneP);
+          canvas.drawRRect(vRect, borderP);
+
+          // Intervertebral disc space
+          if (i < 4) {
+            final discY = vy + s.height * 0.055;
+            final discRect = Rect.fromCenter(center: Offset(cx, discY), width: s.width * 0.24, height: s.height * 0.025);
+            canvas.drawRect(discRect, Paint()..color = Colors.cyan.withValues(alpha: 0.3));
+          }
+
+          // Vertebral label
+          textP.text = TextSpan(
+            text: 'L${i + 1}',
+            style: const TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.bold),
+          );
+          textP.layout();
+          textP.paint(canvas, Offset(cx - s.width * 0.22, vy - 6));
+        }
+
+        // Spine midline Cobb vector
+        final spinePath = Path()
+          ..moveTo(cx, s.height * 0.15)
+          ..quadraticBezierTo(cx + 18, s.height * 0.5, cx, s.height * 0.85);
+        canvas.drawPath(spinePath, highlightP..strokeWidth = 3);
+        break;
+
+      case VisionScenario.posture:
+      case VisionScenario.gonsteadListing:
+        // Render Cervical/Thoracic/Lumbar Spine Column Vector
+        final spineP = Paint()
+          ..color = scenario.color
+          ..strokeWidth = 3.5
+          ..style = PaintingStyle.stroke;
+        final plumbP = Paint()
+          ..color = Colors.redAccent.withValues(alpha: 0.6)
+          ..strokeWidth = 1.5;
+
+        // Plumb line reference
+        canvas.drawLine(Offset(cx, s.height * 0.1), Offset(cx, s.height * 0.9), plumbP);
+
+        // Spine curvature
+        final path = Path()
+          ..moveTo(cx, s.height * 0.15)
+          ..cubicTo(cx + 15, s.height * 0.35, cx - 20, s.height * 0.6, cx, s.height * 0.85);
+        canvas.drawPath(path, spineP);
+
+        // Anatomical landmark nodes (Occiput, T1, L3, Sacrum)
+        final nodes = [
+          Offset(cx, s.height * 0.15),
+          Offset(cx + 10, s.height * 0.35),
+          Offset(cx - 12, s.height * 0.6),
+          Offset(cx, s.height * 0.85),
+        ];
+        for (var pt in nodes) {
+          canvas.drawCircle(pt, 6, nodeP);
+          canvas.drawCircle(pt, 12, Paint()..color = scenario.color.withValues(alpha: 0.3)..style = PaintingStyle.stroke);
+        }
+        break;
+
+      case VisionScenario.thermalScan:
+        // Paraspinal Infrared Thermographic Heatmap Visual
+        final blueP = Paint()..color = Colors.blue.withValues(alpha: 0.35)..style = PaintingStyle.fill;
+        final redP = Paint()..color = Colors.redAccent.withValues(alpha: 0.6)..style = PaintingStyle.fill;
+        final orangeP = Paint()..color = Colors.orangeAccent.withValues(alpha: 0.5)..style = PaintingStyle.fill;
+
+        for (int i = 0; i < 7; i++) {
+          final y = s.height * (0.2 + i * 0.09);
+          canvas.drawCircle(Offset(cx - s.width * 0.15, y), 22, blueP);
+          final rightColor = (i == 3 || i == 4) ? redP : orangeP;
+          canvas.drawCircle(Offset(cx + s.width * 0.15, y), (i == 3 || i == 4) ? 28 : 20, rightColor);
+        }
+        canvas.drawLine(Offset(cx, s.height * 0.15), Offset(cx, s.height * 0.85), Paint()..color = Colors.white54..strokeWidth = 2);
+        break;
+
+      case VisionScenario.dermatology:
+        // Dermatological Skin Scan Surface
+        final skinRingP = Paint()
+          ..color = scenario.color.withValues(alpha: 0.7)
+          ..strokeWidth = 2
+          ..style = PaintingStyle.stroke;
+        canvas.drawCircle(Offset(cx, cy), s.width * 0.22, skinRingP);
+        canvas.drawCircle(Offset(cx, cy), s.width * 0.12, Paint()..color = Colors.pinkAccent.withValues(alpha: 0.25));
+        canvas.drawCircle(Offset(cx, cy), 6, nodeP);
+
+        // Scanning reticle crosshairs
+        canvas.drawLine(Offset(cx - s.width * 0.28, cy), Offset(cx + s.width * 0.28, cy), Paint()..color = scenario.color.withValues(alpha: 0.4));
+        canvas.drawLine(Offset(cx, cy - s.width * 0.28), Offset(cx, cy + s.width * 0.28), Paint()..color = scenario.color.withValues(alpha: 0.4));
+        break;
+
+      case VisionScenario.facialAsymmetry:
+        // Facial Palsy Symmetry Grid
+        final faceOval = Rect.fromCenter(center: Offset(cx, cy), width: s.width * 0.42, height: s.height * 0.55);
+        canvas.drawOval(faceOval, highlightP);
+
+        // Eye and mouth landmark horizontal alignment lines
+        canvas.drawLine(Offset(cx - s.width * 0.25, cy - s.height * 0.1), Offset(cx + s.width * 0.25, cy - s.height * 0.1), Paint()..color = Colors.indigoAccent..strokeWidth = 1.5);
+        canvas.drawLine(Offset(cx - s.width * 0.25, cy + s.height * 0.12), Offset(cx + s.width * 0.25, cy + s.height * 0.12), Paint()..color = Colors.indigoAccent..strokeWidth = 1.5);
+
+        canvas.drawCircle(Offset(cx - s.width * 0.1, cy - s.height * 0.1), 5, nodeP);
+        canvas.drawCircle(Offset(cx + s.width * 0.1, cy - s.height * 0.1), 5, nodeP);
+        canvas.drawCircle(Offset(cx - s.width * 0.08, cy + s.height * 0.12), 5, nodeP);
+        canvas.drawCircle(Offset(cx + s.width * 0.08, cy + s.height * 0.1), 5, Paint()..color = Colors.amberAccent);
+        break;
+
+      case VisionScenario.joints:
+      case VisionScenario.fullBodyRom:
+        // Joint Articular Goniometer Vector
+        final jointPivot = Offset(cx, cy);
+        final bone1 = Offset(cx - s.width * 0.18, cy - s.height * 0.22);
+        final bone2 = Offset(cx + s.width * 0.22, cy + s.height * 0.18);
+
+        canvas.drawLine(jointPivot, bone1, highlightP..strokeWidth = 4);
+        canvas.drawLine(jointPivot, bone2, highlightP..strokeWidth = 4);
+        canvas.drawCircle(jointPivot, 10, Paint()..color = Colors.amberAccent);
+        canvas.drawCircle(jointPivot, 24, Paint()..color = scenario.color.withValues(alpha: 0.25));
+        break;
+
+      case VisionScenario.gaitAnalysis:
+        // Dynamic Stride Gait Movement Vectors
+        final hipL = Offset(cx - s.width * 0.15, cy - s.height * 0.15);
+        final hipR = Offset(cx + s.width * 0.15, cy - s.height * 0.15);
+        final footL = Offset(cx - s.width * 0.22, cy + s.height * 0.28);
+        final footR = Offset(cx + s.width * 0.22, cy + s.height * 0.2);
+
+        canvas.drawLine(hipL, hipR, highlightP);
+        canvas.drawLine(hipL, footL, Paint()..color = Colors.purpleAccent..strokeWidth = 3);
+        canvas.drawLine(hipR, footR, Paint()..color = Colors.deepPurpleAccent..strokeWidth = 3);
+
+        canvas.drawCircle(footL, 8, nodeP);
+        canvas.drawCircle(footR, 8, nodeP);
+        break;
+
+      case VisionScenario.neuroTremor:
+        // Neuromuscular Tremor Waveform & Hand Landmark Cloud
+        final waveP = Paint()..color = scenario.color..strokeWidth = 2.5..style = PaintingStyle.stroke;
+        final wavePath = Path()..moveTo(s.width * 0.1, cy + s.height * 0.2);
+        for (double x = s.width * 0.1; x <= s.width * 0.9; x += 5) {
+          final y = cy + s.height * 0.2 + math.sin(x * 0.08) * 18;
+          wavePath.lineTo(x, y);
+        }
+        canvas.drawPath(wavePath, waveP);
+
+        final rng = math.Random(42);
+        for (int i = 0; i < 14; i++) {
+          final dx = cx + (rng.nextDouble() - 0.5) * s.width * 0.35;
+          final dy = cy - s.height * 0.1 + (rng.nextDouble() - 0.5) * s.height * 0.25;
+          canvas.drawCircle(Offset(dx, dy), 4.5, Paint()..color = Colors.amberAccent.withValues(alpha: 0.8));
+        }
+        break;
+
+      case VisionScenario.compareProgress:
+        // Baseline vs Follow-up Split Screen Posture Vector
+        canvas.drawLine(Offset(cx, 0), Offset(cx, s.height), Paint()..color = Colors.white54..strokeWidth = 2);
+
+        // Baseline (Left)
+        final leftPath = Path()
+          ..moveTo(s.width * 0.25, s.height * 0.15)
+          ..quadraticBezierTo(s.width * 0.38, cy, s.width * 0.25, s.height * 0.85);
+        canvas.drawPath(leftPath, Paint()..color = Colors.redAccent..strokeWidth = 3.5..style = PaintingStyle.stroke);
+
+        // Progress (Right)
+        final rightPath = Path()
+          ..moveTo(s.width * 0.75, s.height * 0.15)
+          ..quadraticBezierTo(s.width * 0.76, cy, s.width * 0.75, s.height * 0.85);
+        canvas.drawPath(rightPath, Paint()..color = Colors.tealAccent..strokeWidth = 3.5..style = PaintingStyle.stroke);
+        break;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _FullBodyAnatomicPainter oldDelegate) => oldDelegate.scenario != scenario;
 }

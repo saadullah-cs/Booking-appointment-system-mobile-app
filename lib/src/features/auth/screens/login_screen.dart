@@ -6,6 +6,7 @@ import '../../shared/widgets/premium_card.dart';
 import '../auth_providers.dart';
 import '../../utils/validators.dart';
 import '../../../theme/app_theme.dart';
+import '../../../services/app_preferences.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -39,6 +40,46 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           CurvedAnimation(parent: _animController, curve: Curves.easeOutCubic),
         );
     _animController.forward();
+    _checkAutoLogin();
+  }
+
+  Future<void> _checkAutoLogin() async {
+    final prefs = await AppPreferences.instance.prefs;
+    final isStaffLoggedIn = prefs.getBool('is_staff_logged_in') ?? false;
+    if (isStaffLoggedIn) {
+      if (mounted) {
+        final staffEmail = prefs.getString('logged_in_staff_email') ?? '';
+        final staffPinEnabled =
+            prefs.getBool('staff_pin_enabled_$staffEmail') ?? false;
+        final staffPinCode =
+            prefs.getString('staff_pin_code_$staffEmail') ?? '';
+        final staffUnlocked =
+            prefs.getBool('staff_unlocked_$staffEmail') ?? false;
+
+        if ((staffPinEnabled || staffPinCode.isNotEmpty) && !staffUnlocked) {
+          context.go('/staff-lock');
+        } else {
+          context.go('/staff-dashboard');
+        }
+      }
+      return;
+    }
+
+    final authRepo = ref.read(authRepositoryProvider);
+    final user = authRepo.currentUser;
+    if (user != null) {
+      if (mounted) {
+        final pinEnabled = prefs.getBool('security_pin_enabled') ?? false;
+        final pinCode = prefs.getString('security_pin_code') ?? '';
+        final alreadyUnlocked = prefs.getBool('security_unlocked') ?? false;
+
+        if ((pinEnabled || pinCode.isNotEmpty) && !alreadyUnlocked) {
+          context.go('/security-lock');
+        } else {
+          context.go('/dashboard');
+        }
+      }
+    }
   }
 
   @override
@@ -168,22 +209,22 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
                           // Header
                           Text(
-                            'Welcome back 👋',
+                            'GONSTEAD CLINIC',
                             style: GoogleFonts.poppins(
-                              fontSize: 28,
-                              fontWeight: FontWeight.w800,
+                              fontSize: 24,
+                              fontWeight: FontWeight.w900,
                               color: cs.onSurface,
-                              letterSpacing: -0.5,
+                              letterSpacing: 1.2,
                             ),
                             textAlign: TextAlign.center,
                           ),
-                          const SizedBox(height: 8),
                           Text(
-                            'Sign in to access appointments, notes, and your care dashboard.',
+                            'DOCTOR ACCESS PORTAL',
                             style: GoogleFonts.poppins(
-                              fontSize: 14,
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w700,
                               color: cs.onSurface.withValues(alpha: 0.6),
-                              height: 1.5,
+                              letterSpacing: 2.0,
                             ),
                             textAlign: TextAlign.center,
                           ),

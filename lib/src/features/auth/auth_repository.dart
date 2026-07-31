@@ -514,6 +514,8 @@ class AuthRepository {
   // --- Staff Portal Access & Credentials ---
 
   static const String _allowStaffViewKey = 'clinic_allow_staff_view';
+  static const String _allowStaffPaymentQuickViewKey =
+      'clinic_allow_staff_payment_quick_view';
   static const String _staffCredentialsKey = 'clinic_staff_credentials';
 
   Future<bool> getStaffViewToggle() async {
@@ -549,6 +551,43 @@ class AuthRepository {
             .set({'allowStaffView': enabled}, SetOptions(merge: true));
       } catch (e) {
         debugPrint('Failed to set staff toggle online: $e');
+      }
+    }
+  }
+
+  Future<bool> getStaffPaymentQuickViewToggle() async {
+    if (await _ensureFirebaseInitialized()) {
+      try {
+        final doc = await FirebaseFirestore.instance
+            .collection('settings')
+            .doc('clinic_config')
+            .get();
+        if (doc.exists && doc.data() != null) {
+          final val = doc.data()?['allowStaffPaymentQuickView'] == true;
+          final prefs = await _prefsFuture;
+          await prefs.setBool(_allowStaffPaymentQuickViewKey, val);
+          return val;
+        }
+      } catch (e) {
+        debugPrint('Failed to get staff payment quick view toggle online: $e');
+      }
+    }
+    final prefs = await _prefsFuture;
+    return prefs.getBool(_allowStaffPaymentQuickViewKey) ?? false;
+  }
+
+  Future<void> setStaffPaymentQuickViewToggle(bool enabled) async {
+    final prefs = await _prefsFuture;
+    await prefs.setBool(_allowStaffPaymentQuickViewKey, enabled);
+
+    if (await _ensureFirebaseInitialized()) {
+      try {
+        await FirebaseFirestore.instance
+            .collection('settings')
+            .doc('clinic_config')
+            .set({'allowStaffPaymentQuickView': enabled}, SetOptions(merge: true));
+      } catch (e) {
+        debugPrint('Failed to set staff payment quick view toggle online: $e');
       }
     }
   }

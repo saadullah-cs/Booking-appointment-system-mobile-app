@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
+import 'package:local_auth/local_auth.dart';
 import '../../../services/app_preferences.dart';
 import '../../../theme/app_theme.dart';
 
@@ -18,8 +19,10 @@ class _StaffLockScreenState extends ConsumerState<StaffLockScreen>
   String _enteredPin = '';
   String _storedPin = '';
   String _staffEmail = '';
+  bool _biometricEnabled = false;
   bool _isShaking = false;
   bool _isLoading = true;
+  final LocalAuthentication _localAuth = LocalAuthentication();
 
   late final AnimationController _shakeController;
   late final Animation<double> _shakeAnim;
@@ -42,12 +45,21 @@ class _StaffLockScreenState extends ConsumerState<StaffLockScreen>
     final prefs = await AppPreferences.instance.prefs;
     final staffEmail = prefs.getString('logged_in_staff_email') ?? '';
     final storedPin = prefs.getString('staff_pin_code_$staffEmail') ?? '';
+    final bioEnabled =
+        prefs.getBool('staff_biometric_enabled_$staffEmail') ?? false;
 
     setState(() {
       _staffEmail = staffEmail;
       _storedPin = storedPin;
+      _biometricEnabled = bioEnabled;
       _isLoading = false;
     });
+
+    if (bioEnabled) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _triggerBiometricScan();
+      });
+    }
   }
 
   @override
@@ -77,6 +89,8 @@ class _StaffLockScreenState extends ConsumerState<StaffLockScreen>
   Future<void> _verifyPin() async {
     await Future.delayed(const Duration(milliseconds: 150));
     if (_enteredPin == _storedPin) {
+      final prefs = await AppPreferences.instance.prefs;
+      await prefs.setBool('staff_unlocked_$_staffEmail', true);
       if (mounted) {
         if (Navigator.of(context).canPop()) {
           Navigator.of(context).pop(true);
@@ -93,6 +107,54 @@ class _StaffLockScreenState extends ConsumerState<StaffLockScreen>
           _isShaking = false;
         });
       });
+    }
+  }
+
+  Future<void> _triggerBiometricScan() async {
+    try {
+      final bool canAuthenticate =
+          await _localAuth.canCheckBiometrics ||
+          await _localAuth.isDeviceSupported();
+      if (!canAuthenticate) {
+        _showSnackBar(
+          'Biometric authentication is not available on this device.',
+          isError: true,
+        );
+        return;
+      }
+
+      final available = await _localAuth.getAvailableBiometrics();
+      if (available.isEmpty) {
+        _showSnackBar(
+          'No biometrics enrolled on this device.',
+          isError: true,
+        );
+        return;
+      }
+
+      final bool authenticated = await _localAuth.authenticate(
+        localizedReason: 'Authenticate to unlock Staff Portal',
+        options: const AuthenticationOptions(
+          biometricOnly: false,
+          useErrorDialogs: true,
+          stickyAuth: true,
+        ),
+      );
+
+      if (authenticated && mounted) {
+        final prefs = await AppPreferences.instance.prefs;
+        await prefs.setBool('staff_unlocked_$_staffEmail', true);
+        if (Navigator.of(context).canPop()) {
+          Navigator.of(context).pop(true);
+        } else {
+          context.go('/staff-dashboard');
+        }
+        return;
+      }
+    } catch (e) {
+      if (mounted) {
+        _showSnackBar('Biometric authentication failed. Use PIN.', isError: true);
+      }
     }
   }
 
@@ -276,7 +338,7 @@ class _StaffLockScreenState extends ConsumerState<StaffLockScreen>
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                         children: [
-                          const SizedBox(width: 68, height: 68), // Spacer
+                          _buildFingerprintButton(),
                           _buildKey('0'),
                           _buildBackspaceButton(),
                         ],
@@ -332,6 +394,31 @@ class _StaffLockScreenState extends ConsumerState<StaffLockScreen>
             fontWeight: FontWeight.w700,
             color: Colors.white,
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFingerprintButton() {
+    if (!_biometricEnabled) return const SizedBox(width: 68, height: 68);
+    return GestureDetector(
+      onTap: _triggerBiometricScan,
+      child: Container(
+        width: 68,
+        height: 68,
+        decoration: BoxDecoration(
+          color: AppColors.primary.withValues(alpha: 0.12),
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: AppColors.primary.withValues(alpha: 0.4),
+            width: 1.5,
+          ),
+        ),
+        alignment: Alignment.center,
+        child: const Icon(
+          Icons.fingerprint_rounded,
+          color: AppColors.primary,
+          size: 30,
         ),
       ),
     );

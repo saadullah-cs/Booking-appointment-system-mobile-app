@@ -1034,26 +1034,50 @@ class _PatientHistoryScreenState extends ConsumerState<PatientHistoryScreen> {
                                         const SizedBox(height: 10),
                                       ],
 
-                                      Align(
-                                        alignment: Alignment.centerRight,
-                                        child: TextButton.icon(
-                                          onPressed: () => context
-                                              .push('/appointment/${apt.id}')
-                                              .then((_) => _loadData()),
-                                          icon: const Icon(
-                                            Icons.arrow_forward_rounded,
-                                            size: 14,
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          TextButton.icon(
+                                            onPressed: () async {
+                                              try {
+                                                final pdfBytes = await generatePatientReportPdf(apt);
+                                                await Printing.layoutPdf(
+                                                  onLayout: (format) async => pdfBytes,
+                                                  name: 'Appointment_Slip_${apt.patientName.replaceAll(' ', '_')}',
+                                                );
+                                              } catch (e) {
+                                                ScaffoldMessenger.of(context).showSnackBar(
+                                                  SnackBar(content: Text('Failed to generate PDF slip: $e')),
+                                                );
+                                              }
+                                            },
+                                            icon: const Icon(Icons.picture_as_pdf_rounded, size: 14, color: Colors.redAccent),
+                                            label: Text('Regenerate PDF Slip', style: GoogleFonts.poppins(color: Colors.redAccent, fontSize: 11, fontWeight: FontWeight.w600)),
+                                            style: TextButton.styleFrom(
+                                              padding: EdgeInsets.zero,
+                                              minimumSize: Size.zero,
+                                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                            ),
                                           ),
-                                          label: const Text(
-                                            'View Full Session',
+                                          TextButton.icon(
+                                            onPressed: () => context
+                                                .push('/appointment/${apt.id}')
+                                                .then((_) => _loadData()),
+                                            icon: const Icon(
+                                              Icons.arrow_forward_rounded,
+                                              size: 14,
+                                            ),
+                                            label: const Text(
+                                              'View Full Session',
+                                            ),
+                                            style: TextButton.styleFrom(
+                                              padding: EdgeInsets.zero,
+                                              minimumSize: Size.zero,
+                                              tapTargetSize: MaterialTapTargetSize
+                                                  .shrinkWrap,
+                                            ),
                                           ),
-                                          style: TextButton.styleFrom(
-                                            padding: EdgeInsets.zero,
-                                            minimumSize: Size.zero,
-                                            tapTargetSize: MaterialTapTargetSize
-                                                .shrinkWrap,
-                                          ),
-                                        ),
+                                        ],
                                       ),
                                     ],
                                   ),

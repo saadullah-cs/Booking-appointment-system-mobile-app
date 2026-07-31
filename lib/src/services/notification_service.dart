@@ -413,6 +413,26 @@ class NotificationService {
     }
   }
 
+  static int getNoteReminderId(String id) =>
+      (id.hashCode.abs() % 50000000) + 200000000;
+
+  Future<void> scheduleNoteReminder({
+    required String noteId,
+    required String title,
+    required String body,
+    required DateTime scheduledDate,
+  }) async {
+    final reminderId = getNoteReminderId(noteId);
+    await cancelNotification(reminderId);
+    await scheduleLocalNotification(
+      id: reminderId,
+      title: '📌 Clinical Note Reminder: $title',
+      body: body,
+      scheduledDate: scheduledDate,
+      payload: '/notes',
+    );
+  }
+
   static int getReminderId(String id) => (id.hashCode.abs() % 50000000) * 2;
   static int getStartId(String id) => ((id.hashCode.abs() % 50000000) * 2) + 1;
   static int getPaymentReminderId(String id) =>
@@ -436,7 +456,7 @@ class NotificationService {
         await prefs.setString('alarm_body_$id', body);
         await prefs.setString('alarm_payload_$id', payload ?? '');
 
-        final success = await AndroidAlarmManager.oneShotAt(
+        await AndroidAlarmManager.oneShotAt(
           scheduledDate,
           id,
           _alarmCallback,
@@ -445,35 +465,49 @@ class NotificationService {
           exact: true,
           wakeup: true,
         );
-        if (kDebugMode) {
-          debugPrint('AndroidAlarmManager scheduled alarm $id: $success');
-        }
       } catch (e) {
         if (kDebugMode) {
           debugPrint('AndroidAlarmManager scheduling failed: $e');
         }
       }
-    } else {
-      const androidDetails = AndroidNotificationDetails(
-        'gct_scheduled_channel_v2',
-        'GCT Reminders',
-        channelDescription: 'Scheduled reminders for GCT app',
-        importance: Importance.max,
-        priority: Priority.high,
-        playSound: true,
-        enableVibration: true,
-        visibility: NotificationVisibility.public,
-        audioAttributesUsage: AudioAttributesUsage.alarm,
-        category: AndroidNotificationCategory.alarm,
-      );
-      const iosDetails = DarwinNotificationDetails();
-      final details = NotificationDetails(
-        android: androidDetails,
-        iOS: iosDetails,
-      );
+    }
 
-      final tzScheduledDate = tz.TZDateTime.from(scheduledDate.toUtc(), tz.UTC);
+    const androidDetails = AndroidNotificationDetails(
+      'gct_scheduled_channel_v2',
+      'GCT Reminders',
+      channelDescription: 'Scheduled reminders for GCT app',
+      importance: Importance.max,
+      priority: Priority.high,
+      playSound: true,
+      enableVibration: true,
+      visibility: NotificationVisibility.public,
+      audioAttributesUsage: AudioAttributesUsage.alarm,
+      category: AndroidNotificationCategory.alarm,
+    );
+    const iosDetails = DarwinNotificationDetails();
+    final details = NotificationDetails(
+      android: androidDetails,
+      iOS: iosDetails,
+    );
 
+    final tzScheduledDate = tz.TZDateTime.from(scheduledDate.toUtc(), tz.UTC);
+
+    try {
+      await _local.zonedSchedule(
+        id,
+        title,
+        body,
+        tzScheduledDate,
+        details,
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime,
+        payload: payload,
+      );
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Exact schedule failed (falling back to inexact): $e');
+      }
       try {
         await _local.zonedSchedule(
           id,
@@ -481,31 +515,14 @@ class NotificationService {
           body,
           tzScheduledDate,
           details,
-          androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+          androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
           uiLocalNotificationDateInterpretation:
               UILocalNotificationDateInterpretation.absoluteTime,
           payload: payload,
         );
-      } catch (e) {
+      } catch (ex) {
         if (kDebugMode) {
-          debugPrint('Exact schedule failed (falling back to inexact): $e');
-        }
-        try {
-          await _local.zonedSchedule(
-            id,
-            title,
-            body,
-            tzScheduledDate,
-            details,
-            androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-            uiLocalNotificationDateInterpretation:
-                UILocalNotificationDateInterpretation.absoluteTime,
-            payload: payload,
-          );
-        } catch (ex) {
-          if (kDebugMode) {
-            debugPrint('Inexact schedule failed: $ex');
-          }
+          debugPrint('Inexact schedule failed: $ex');
         }
       }
     }
@@ -527,9 +544,6 @@ class NotificationService {
         );
         final formattedTime = DateFormat(
           'hh:mm a',
-        ).format(apt.scheduledAt!.toLocal());
-        final formattedDayDate = DateFormat(
-          'EEEE, MMM d',
         ).format(apt.scheduledAt!.toLocal());
 
         if (reminderTime.isAfter(now)) {
@@ -572,9 +586,6 @@ class NotificationService {
       if (payment.reminderDate != null && payment.reminderDate!.isAfter(now)) {
         final balance = payment.amount - payment.paidAmount;
         if (balance > 0) {
-          final formattedDate = DateFormat(
-            'MMM dd, yyyy',
-          ).format(payment.reminderDate!.toLocal());
           await scheduleLocalNotification(
             id: reminderId,
             title: 'Payment Reminder 💳',

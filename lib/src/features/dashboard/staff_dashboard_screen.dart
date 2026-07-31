@@ -5,11 +5,19 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:local_auth/local_auth.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 
+import '../appointments/widgets/visual_calendar_widget.dart';
 import '../../models/appointment.dart';
 import '../../services/app_preferences.dart';
 import '../../services/notification_service.dart';
 import '../../services/payment_gateway_service.dart';
+import '../../services/repository_providers.dart';
+import '../../services/security_service.dart';
+import '../../services/staff_activity_logger.dart';
 import '../../theme/app_theme.dart';
 import '../shared/widgets/premium_card.dart';
 
@@ -21,28 +29,112 @@ class StaffDashboardScreen extends ConsumerStatefulWidget {
       _StaffDashboardScreenState();
 }
 
-class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
+class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen>
+    with WidgetsBindingObserver {
   String _staffEmail = '';
   String _searchQuery = '';
   String _selectedStatus = 'All';
   bool _remindersSynced = false;
   bool _isSyncing = false;
+  bool _isCalendarView = false;
+  static bool _isLockShowing = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    SecurityService.preventScreenshots(true);
     _loadStaffInfo();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    SecurityService.preventScreenshots(false);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) {
+      SecurityService.preventScreenshots(false);
+      if (_staffEmail.isNotEmpty) {
+        AppPreferences.instance.prefs.then((prefs) {
+          prefs.setBool('staff_unlocked_$_staffEmail', false);
+        });
+      }
+    } else if (state == AppLifecycleState.resumed) {
+      SecurityService.preventScreenshots(true);
+      _checkStaffLockOnResume();
+    }
+  }
+
+  Future<void> _checkStaffLockOnResume() async {
+    if (_isLockShowing || _staffEmail.isEmpty) return;
+    final prefs = await AppPreferences.instance.prefs;
+    final pinEnabled = prefs.getBool('staff_pin_enabled_$_staffEmail') ?? false;
+    final unlocked = prefs.getBool('staff_unlocked_$_staffEmail') ?? false;
+
+    if (pinEnabled && !unlocked) {
+      _isLockShowing = true;
+      if (!mounted) return;
+      await context.push('/staff-lock');
+      _isLockShowing = false;
+    }
   }
 
   Future<void> _loadStaffInfo() async {
     final prefs = await AppPreferences.instance.prefs;
+    final email = prefs.getString('logged_in_staff_email') ?? 'Staff Member';
     setState(() {
-      _staffEmail = prefs.getString('logged_in_staff_email') ?? 'Staff Member';
+      _staffEmail = email;
     });
+
+    await StaffActivityLogger().logActivity(
+      staffEmail: email,
+      action: 'Dashboard Access',
+      featureUsed: 'Staff Portal Appointments List',
+    );
+
+    // Check lock state on initial load
+    final pinEnabled = prefs.getBool('staff_pin_enabled_$email') ?? false;
+    final unlocked = prefs.getBool('staff_unlocked_$email') ?? false;
+    if (pinEnabled && !unlocked && mounted) {
+      _isLockShowing = true;
+      await context.push('/staff-lock');
+      _isLockShowing = false;
+    }
+  }
+
+  Future<void> _markPatientArrived(Appointment apt, String tokenStr) async {
+    try {
+      final repo = ref.read(appointmentRepositoryProvider);
+      final updated = apt.copyWith(status: 'Arrived');
+      await repo.updateAppointment(updated);
+
+      await StaffActivityLogger().logActivity(
+        staffEmail: _staffEmail,
+        action: 'Patient Check-In',
+        featureUsed: 'Mark Arrived (${apt.patientName} - $tokenStr)',
+      );
+
+      _showSnackBar(
+        '🔔 ${apt.patientName} ($tokenStr) marked ARRIVED! Doctor notified.',
+      );
+    } catch (e) {
+      _showSnackBar('Failed to update status: $e', isError: true);
+    }
   }
 
   Future<void> _logout() async {
     final prefs = await AppPreferences.instance.prefs;
+    final email = _staffEmail;
+    await StaffActivityLogger().logActivity(
+      staffEmail: email,
+      action: 'Logout',
+      featureUsed: 'Staff Dashboard',
+    );
+
     await prefs.remove('is_staff_logged_in');
     await prefs.remove('logged_in_staff_email');
     if (!mounted) return;
@@ -219,24 +311,341 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
             ],
           ),
           const SizedBox(height: 12),
-          Text(
-            'Signed in as:',
-            style: GoogleFonts.poppins(
-              fontSize: 11,
-              color: cs.onSurface.withValues(alpha: 0.5),
-            ),
-          ),
-          Text(
-            _staffEmail,
-            style: GoogleFonts.poppins(
-              fontSize: 13,
-              fontWeight: FontWeight.bold,
-              color: cs.primary,
-            ),
-            overflow: TextOverflow.ellipsis,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Signed in as:',
+                      style: GoogleFonts.poppins(
+                        fontSize: 11,
+                        color: cs.onSurface.withValues(alpha: 0.5),
+                      ),
+                    ),
+                    Text(
+                      _staffEmail,
+                      style: GoogleFonts.poppins(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: cs.primary,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              ElevatedButton.icon(
+                onPressed: _openStaffSecuritySettings,
+                icon: const Icon(Icons.security_rounded, size: 16),
+                label: Text(
+                  'PIN Lock & Biometrics',
+                  style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: cs.primary.withValues(alpha: 0.1),
+                  foregroundColor: cs.primary,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
+    );
+  }
+
+  Future<void> _openStaffSecuritySettings() async {
+    final prefs = await AppPreferences.instance.prefs;
+    final staffEmail = _staffEmail.isNotEmpty
+        ? _staffEmail
+        : (prefs.getString('logged_in_staff_email') ?? '');
+    
+    bool pinEnabled = prefs.getBool('staff_pin_enabled_$staffEmail') ?? false;
+    bool bioEnabled = prefs.getBool('staff_biometric_enabled_$staffEmail') ?? false;
+    String storedPin = prefs.getString('staff_pin_code_$staffEmail') ?? '';
+
+    if (!mounted) return;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final cs = Theme.of(context).colorScheme;
+            return Container(
+              decoration: BoxDecoration(
+                color: Theme.of(context).scaffoldBackgroundColor,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: cs.primary.withValues(alpha: 0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(Icons.shield_rounded, color: cs.primary, size: 24),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Staff Security & Lock',
+                              style: GoogleFonts.poppins(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            Text(
+                              'Set 4-digit PIN & Fingerprint lock for Staff Portal',
+                              style: GoogleFonts.poppins(
+                                fontSize: 11,
+                                color: cs.onSurface.withValues(alpha: 0.6),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  SwitchListTile.adaptive(
+                    value: pinEnabled || storedPin.isNotEmpty,
+                    onChanged: (val) async {
+                      if (val) {
+                        final newPin = await _showStaffPinInputDialog(
+                          title: 'Create 4-Digit Staff PIN',
+                          description: 'Set a PIN code to lock Staff Portal.',
+                        );
+                        if (newPin == null || newPin.length < 4) return;
+                        await prefs.setBool('staff_pin_enabled_$staffEmail', true);
+                        await prefs.setString('staff_pin_code_$staffEmail', newPin);
+                        setModalState(() {
+                          pinEnabled = true;
+                          storedPin = newPin;
+                        });
+                        _showSnackBar('Staff PIN Lock enabled successfully! 🔒');
+                      } else {
+                        await prefs.setBool('staff_pin_enabled_$staffEmail', false);
+                        await prefs.setBool('staff_biometric_enabled_$staffEmail', false);
+                        await prefs.remove('staff_pin_code_$staffEmail');
+                        setModalState(() {
+                          pinEnabled = false;
+                          bioEnabled = false;
+                          storedPin = '';
+                        });
+                        _showSnackBar('Staff PIN Lock disabled.');
+                      }
+                    },
+                    title: Text(
+                      'PIN Lock Protection',
+                      style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14),
+                    ),
+                    subtitle: Text(
+                      storedPin.isNotEmpty
+                          ? 'Active PIN: ****'
+                          : 'Require 4-digit PIN to open Staff Portal',
+                      style: GoogleFonts.poppins(fontSize: 12),
+                    ),
+                    secondary: Icon(Icons.pin_rounded, color: cs.primary),
+                  ),
+                  const Divider(),
+                  SwitchListTile.adaptive(
+                    value: bioEnabled,
+                    onChanged: (pinEnabled || storedPin.isNotEmpty)
+                        ? (val) async {
+                            final localAuth = LocalAuthentication();
+                            final canCheck = await localAuth.canCheckBiometrics ||
+                                await localAuth.isDeviceSupported();
+                            if (val && !canCheck) {
+                              _showSnackBar(
+                                'Device does not support biometric authentication.',
+                                isError: true,
+                              );
+                              return;
+                            }
+                            await prefs.setBool('staff_biometric_enabled_$staffEmail', val);
+                            setModalState(() => bioEnabled = val);
+                            _showSnackBar(
+                              val
+                                  ? 'Staff Biometric fingerprint enabled. 🧬'
+                                  : 'Biometric authentication disabled.',
+                            );
+                          }
+                        : null,
+                    title: Text(
+                      'Biometric Fingerprint Scan',
+                      style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14),
+                    ),
+                    subtitle: Text(
+                      'Unlock Staff Portal using fingerprint sensor',
+                      style: GoogleFonts.poppins(fontSize: 12),
+                    ),
+                    secondary: Icon(
+                      Icons.fingerprint_rounded,
+                      color: (pinEnabled || storedPin.isNotEmpty) ? cs.primary : Colors.grey,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: Text('Done', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<String?> _showStaffPinInputDialog({
+    required String title,
+    required String description,
+  }) async {
+    String input = '';
+    return showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext ctx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final cs = Theme.of(context).colorScheme;
+            return Dialog(
+              backgroundColor: Colors.transparent,
+              child: PremiumCard(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      title,
+                      style: GoogleFonts.poppins(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: cs.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      description,
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        color: cs.onSurface.withValues(alpha: 0.65),
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 24),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: List.generate(4, (index) {
+                        final filled = index < input.length;
+                        return Container(
+                          width: 16,
+                          height: 16,
+                          margin: const EdgeInsets.symmetric(horizontal: 10),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: filled ? cs.primary : Colors.transparent,
+                            border: Border.all(color: cs.primary, width: 2),
+                          ),
+                        );
+                      }),
+                    ),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: 200,
+                      child: GridView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 3,
+                          crossAxisSpacing: 16,
+                          mainAxisSpacing: 16,
+                          childAspectRatio: 1,
+                        ),
+                        itemCount: 12,
+                        itemBuilder: (context, i) {
+                          if (i == 9) {
+                            return IconButton(
+                              icon: const Icon(Icons.cancel_outlined, color: Colors.grey),
+                              onPressed: () => Navigator.pop(context),
+                            );
+                          }
+                          if (i == 11) {
+                            return IconButton(
+                              icon: const Icon(Icons.backspace_outlined, color: Colors.grey),
+                              onPressed: () {
+                                if (input.isNotEmpty) {
+                                  setDialogState(
+                                    () => input = input.substring(0, input.length - 1),
+                                  );
+                                }
+                              },
+                            );
+                          }
+                          final digit = i == 10 ? '0' : (i + 1).toString();
+                          return GestureDetector(
+                            onTap: () {
+                              if (input.length < 4) {
+                                setDialogState(() => input += digit);
+                                if (input.length == 4) {
+                                  Future.delayed(const Duration(milliseconds: 150), () {
+                                    if (context.mounted) {
+                                      Navigator.pop(context, input);
+                                    }
+                                  });
+                                }
+                              }
+                            },
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: cs.primary.withValues(alpha: 0.06),
+                                shape: BoxShape.circle,
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                digit,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: cs.onSurface,
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -327,59 +736,6 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
               icon: const Icon(Icons.chat_bubble_outline_rounded, size: 16),
               label: Text(
                 'Open Group Chat',
-                style: GoogleFonts.poppins(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildVisionAnalyzerCard(ThemeData theme, ColorScheme cs) {
-    return PremiumCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.psychology_rounded, color: cs.primary, size: 20),
-              const SizedBox(width: 8),
-              Text(
-                'AI Patient Analyzer',
-                style: GoogleFonts.poppins(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: cs.onSurface,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Analyze patient posture, gait mechanics, facial paralysis, or skin lesions using live camera scan or photo uploads.',
-            style: GoogleFonts.poppins(
-              fontSize: 11.5,
-              color: cs.onSurface.withValues(alpha: 0.6),
-            ),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: () => context.push('/vision-analyzer'),
-              icon: const Icon(Icons.document_scanner_rounded, size: 16),
-              label: Text(
-                'Open Vision Analyzer',
                 style: GoogleFonts.poppins(
                   fontSize: 12,
                   fontWeight: FontWeight.bold,
@@ -693,8 +1049,6 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
 
         return StatefulBuilder(
           builder: (context, setStatePin) {
-            final cs = Theme.of(context).colorScheme;
-
             void onKeyTap(String digit) {
               setStatePin(() {
                 errorMessage = '';
@@ -1134,6 +1488,8 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
 
         final configData = configSnapshot.data?.data() as Map<String, dynamic>?;
         final allowStaffView = configData?['allowStaffView'] ?? false;
+        final allowStaffPaymentQuickView =
+            configData?['allowStaffPaymentQuickView'] == true;
 
         // If clinic administrator disables the access toggle, suspend dashboard immediately
         if (!allowStaffView) {
@@ -1340,6 +1696,19 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
                       ],
                     ),
                     actions: [
+                      // View Mode Switch (List vs Calendar)
+                      IconButton(
+                        onPressed: () =>
+                            setState(() => _isCalendarView = !_isCalendarView),
+                        icon: Icon(
+                          _isCalendarView
+                              ? Icons.format_list_bulleted_rounded
+                              : Icons.calendar_month_rounded,
+                        ),
+                        tooltip: _isCalendarView
+                            ? 'Switch to List View'
+                            : 'Switch to Calendar View',
+                      ),
                       // Clinic Chat Group
                       IconButton(
                         onPressed: () => context.push('/chat'),
@@ -1375,92 +1744,111 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
                       ),
                     ],
                   ),
-                  body: isWide
-                      ? Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // Left Column (flex: 2)
-                            Expanded(
-                              flex: 2,
-                              child: Column(
-                                children: [
-                                  _buildMetricsRow(
-                                    todayCount,
-                                    pendingCount,
-                                    confirmedCount,
-                                    totalRevenue,
-                                    collectedRevenue,
-                                    pendingRevenue,
+                  body: _isCalendarView
+                      ? SingleChildScrollView(
+                          physics: const BouncingScrollPhysics(),
+                          padding: const EdgeInsets.all(16),
+                          child: VisualCalendarWidget(
+                            appointments: appointments,
+                            onAppointmentTap: (apt) {
+                              _showDetailsBottomSheet(apt);
+                            },
+                            onEmptySlotTap: (slotTime) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    '🔒 Access Restricted: Staff cannot create new bookings. Direct patient to use the Patient App.',
+                                    style: GoogleFonts.poppins(fontWeight: FontWeight.w500),
                                   ),
-                                  _buildSearchAndFilters(),
-                                  Expanded(
-                                    child: _buildAppointmentsList(
-                                      filteredAppointments,
+                                  backgroundColor: Colors.orange.shade800,
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                            },
+                          ),
+                        )
+                      : isWide
+                          ? Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Left Column (flex: 2)
+                                Expanded(
+                                  flex: 2,
+                                  child: Column(
+                                    children: [
+                                      _buildMetricsRow(
+                                        todayCount,
+                                        pendingCount,
+                                        confirmedCount,
+                                        totalRevenue,
+                                        collectedRevenue,
+                                        pendingRevenue,
+                                        allowPaymentQuickView:
+                                            allowStaffPaymentQuickView,
+                                      ),
+                                      _buildSearchAndFilters(),
+                                      Expanded(
+                                        child: _buildAppointmentsList(
+                                          filteredAppointments,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                // Vertical Divider
+                                VerticalDivider(
+                                  width: 1,
+                                  thickness: 1,
+                                  color: cs.onSurface.withValues(alpha: 0.08),
+                                ),
+                                // Right Column (flex: 1)
+                                Expanded(
+                                  flex: 1,
+                                  child: SingleChildScrollView(
+                                    padding: const EdgeInsets.all(16.0),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        _buildGreetingCard(theme, cs),
+                                        const SizedBox(height: 16),
+                                        _buildClinicInfoCard(theme, cs),
+                                        const SizedBox(height: 16),
+                                        _buildChatShortcutCard(theme, cs),
+                                      ],
                                     ),
                                   ),
-                                ],
-                              ),
-                            ),
-                            // Vertical Divider
-                            VerticalDivider(
-                              width: 1,
-                              thickness: 1,
-                              color: cs.onSurface.withValues(alpha: 0.08),
-                            ),
-                            // Right Column (flex: 1)
-                            Expanded(
-                              flex: 1,
-                              child: SingleChildScrollView(
-                                padding: const EdgeInsets.all(16.0),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    _buildGreetingCard(theme, cs),
-                                    const SizedBox(height: 16),
-                                    _buildClinicInfoCard(theme, cs),
-                                    const SizedBox(height: 16),
-                                    _buildChatShortcutCard(theme, cs),
-                                    const SizedBox(height: 16),
-                                    _buildVisionAnalyzerCard(theme, cs),
-                                  ],
                                 ),
-                              ),
+                              ],
+                            )
+                          : ListView(
+                              physics: const BouncingScrollPhysics(),
+                              children: [
+                                // Greeting banner on mobile
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 10,
+                                  ),
+                                  child: _buildGreetingBanner(theme, cs),
+                                ),
+                                _buildMetricsRow(
+                                  todayCount,
+                                  pendingCount,
+                                  confirmedCount,
+                                  totalRevenue,
+                                  collectedRevenue,
+                                  pendingRevenue,
+                                  allowPaymentQuickView:
+                                      allowStaffPaymentQuickView,
+                                ),
+                                _buildSearchAndFilters(),
+                                _buildAppointmentsList(
+                                  filteredAppointments,
+                                  shrinkWrap: true,
+                                ),
+                              ],
                             ),
-                          ],
-                        )
-                      : ListView(
-                          physics: const BouncingScrollPhysics(),
-                          children: [
-                            // Greeting banner on mobile
-                            Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 10,
-                              ),
-                              child: _buildGreetingBanner(theme, cs),
-                            ),
-                            _buildMetricsRow(
-                              todayCount,
-                              pendingCount,
-                              confirmedCount,
-                              totalRevenue,
-                              collectedRevenue,
-                              pendingRevenue,
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 4,
-                              ),
-                              child: _buildVisionAnalyzerCard(theme, cs),
-                            ),
-                            _buildSearchAndFilters(),
-                            _buildAppointmentsList(
-                              filteredAppointments,
-                              shrinkWrap: true,
-                            ),
-                          ],
-                        ),
                 );
               },
             );
@@ -1476,8 +1864,9 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
     int confirmedCount,
     double totalRevenue,
     double collectedRevenue,
-    double pendingRevenue,
-  ) {
+    double pendingRevenue, {
+    bool allowPaymentQuickView = false,
+  }) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
 
@@ -1532,54 +1921,56 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
               ],
             ),
           ),
-          const SizedBox(height: 12),
-          PremiumCard(
-            padding: const EdgeInsets.all(18),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.payments_rounded, color: Colors.green, size: 20),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Payments Quick View',
-                      style: GoogleFonts.poppins(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: cs.onSurface,
+          if (allowPaymentQuickView) ...[
+            const SizedBox(height: 12),
+            PremiumCard(
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.payments_rounded, color: Colors.green, size: 20),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Payments Quick View',
+                        style: GoogleFonts.poppins(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: cs.onSurface,
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    _buildStatItemVertical(
-                      'TOTAL',
-                      'Rs. ${totalRevenue.toStringAsFixed(0)}',
-                      Icons.account_balance_wallet_rounded,
-                      cs.primary,
-                    ),
-                    _buildDivider(),
-                    _buildStatItemVertical(
-                      'COLLECTED',
-                      'Rs. ${collectedRevenue.toStringAsFixed(0)}',
-                      Icons.check_circle_rounded,
-                      Colors.green,
-                    ),
-                    _buildDivider(),
-                    _buildStatItemVertical(
-                      'PENDING',
-                      'Rs. ${pendingRevenue.toStringAsFixed(0)}',
-                      Icons.pending_actions_rounded,
-                      Colors.orange,
-                    ),
-                  ],
-                ),
-              ],
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      _buildStatItemVertical(
+                        'TOTAL',
+                        'Rs. ${totalRevenue.toStringAsFixed(0)}',
+                        Icons.account_balance_wallet_rounded,
+                        cs.primary,
+                      ),
+                      _buildDivider(),
+                      _buildStatItemVertical(
+                        'COLLECTED',
+                        'Rs. ${collectedRevenue.toStringAsFixed(0)}',
+                        Icons.check_circle_rounded,
+                        Colors.green,
+                      ),
+                      _buildDivider(),
+                      _buildStatItemVertical(
+                        'PENDING',
+                        'Rs. ${pendingRevenue.toStringAsFixed(0)}',
+                        Icons.pending_actions_rounded,
+                        Colors.orange,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -1653,6 +2044,502 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
     );
   }
 
+  Future<void> _printThermalTokenSlip({
+    required Appointment apt,
+    required int tokenNumber,
+    required int estWaitMins,
+  }) async {
+    try {
+      final doc = pw.Document();
+      final dateStr = DateFormat('EEE, MMM d, yyyy').format(DateTime.now());
+      final timeStr = apt.scheduledAt != null
+          ? DateFormat('hh:mm a').format(apt.scheduledAt!.toLocal())
+          : DateFormat('hh:mm a').format(DateTime.now());
+
+      doc.addPage(
+        pw.Page(
+          pageFormat: const PdfPageFormat(
+            58 * PdfPageFormat.mm,
+            170 * PdfPageFormat.mm,
+            marginAll: 3 * PdfPageFormat.mm,
+          ),
+          build: (context) {
+            return pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.center,
+              children: [
+                pw.Text(
+                  'GONSTEAD CHIROPRACTIC',
+                  style: pw.TextStyle(
+                    fontSize: 10,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                  textAlign: pw.TextAlign.center,
+                ),
+                pw.Text(
+                  'Dr. Bashir Ahmad • Reception Slip',
+                  style: const pw.TextStyle(fontSize: 7.5),
+                  textAlign: pw.TextAlign.center,
+                ),
+                pw.Text(
+                  'Ph: +92 300 1234567 | GCT Clinic',
+                  style: const pw.TextStyle(fontSize: 6.5),
+                  textAlign: pw.TextAlign.center,
+                ),
+                pw.SizedBox(height: 4),
+                pw.Text('========================================', style: const pw.TextStyle(fontSize: 7)),
+                pw.SizedBox(height: 4),
+
+                pw.Text(
+                  'DAILY PATIENT QUEUE TOKEN',
+                  style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold),
+                ),
+                pw.SizedBox(height: 4),
+                pw.Container(
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                  decoration: pw.BoxDecoration(
+                    border: pw.Border.all(width: 2),
+                    borderRadius: pw.BorderRadius.circular(6),
+                  ),
+                  child: pw.Text(
+                    'TOKEN #${tokenNumber.toString().padLeft(2, '0')}',
+                    style: pw.TextStyle(
+                      fontSize: 18,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
+                  ),
+                ),
+                pw.SizedBox(height: 4),
+                pw.Text(
+                  'Est. Wait Time: ~$estWaitMins mins',
+                  style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold),
+                ),
+                pw.SizedBox(height: 4),
+                pw.Text('========================================', style: const pw.TextStyle(fontSize: 7)),
+                pw.SizedBox(height: 4),
+
+                pw.Align(
+                  alignment: pw.Alignment.centerLeft,
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text('PATIENT: ${apt.patientName}', style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold)),
+                      pw.Text('PHONE: ${apt.phoneNumber}', style: const pw.TextStyle(fontSize: 7.5)),
+                      pw.Text('TREATMENT: ${apt.treatmentType}', style: const pw.TextStyle(fontSize: 7.5)),
+                      pw.Text('TIME: $dateStr @ $timeStr', style: const pw.TextStyle(fontSize: 7.5)),
+                      pw.Text('STATUS: ${apt.status.toUpperCase()}', style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold)),
+                      pw.Text('FEE: Rs. ${apt.amount.toStringAsFixed(0)} (${apt.paymentStatus.toUpperCase()})', style: const pw.TextStyle(fontSize: 7.5)),
+                    ],
+                  ),
+                ),
+
+                pw.SizedBox(height: 6),
+                pw.Text('----------------------------------------', style: const pw.TextStyle(fontSize: 7)),
+                pw.SizedBox(height: 4),
+
+                pw.Text(
+                  'Please present slip when called.\nThank you for choosing GCT Clinic!',
+                  style: const pw.TextStyle(fontSize: 6.5),
+                  textAlign: pw.TextAlign.center,
+                ),
+              ],
+            );
+          },
+        ),
+      );
+
+      await Printing.layoutPdf(
+        onLayout: (format) async => doc.save(),
+        name: 'POS_Token_Slip_${apt.patientName.replaceAll(' ', '_')}.pdf',
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Thermal printing failed: $e', style: GoogleFonts.poppins()),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _printA4TokenSlip({
+    required Appointment apt,
+    required int tokenNumber,
+    required int estWaitMins,
+  }) async {
+    try {
+      final doc = pw.Document();
+      final dateStr = DateFormat('EEEE, MMMM d, yyyy').format(DateTime.now());
+      final timeStr = apt.scheduledAt != null
+          ? DateFormat('hh:mm a').format(apt.scheduledAt!.toLocal())
+          : DateFormat('hh:mm a').format(DateTime.now());
+
+      doc.addPage(
+        pw.Page(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(24),
+          build: (context) {
+            return pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Container(
+                  padding: const pw.EdgeInsets.all(16),
+                  decoration: pw.BoxDecoration(
+                    color: PdfColors.teal900,
+                    borderRadius: pw.BorderRadius.circular(12),
+                  ),
+                  child: pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    children: [
+                      pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Text(
+                            'GONSTEAD CHIROPRACTIC CLINIC (GCT)',
+                            style: pw.TextStyle(
+                              fontSize: 18,
+                              fontWeight: pw.FontWeight.bold,
+                              color: PdfColors.white,
+                            ),
+                          ),
+                          pw.SizedBox(height: 4),
+                          pw.Text(
+                            'Dr. Bashir Ahmad • Consultant Chiropractor',
+                            style: const pw.TextStyle(fontSize: 12, color: PdfColors.teal100),
+                          ),
+                          pw.Text(
+                            'Helpline: +92 300 1234567 | GCT Clinical Reception Portal',
+                            style: const pw.TextStyle(fontSize: 10, color: PdfColors.teal200),
+                          ),
+                        ],
+                      ),
+                      pw.Container(
+                        padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: pw.BoxDecoration(
+                          color: PdfColors.white,
+                          borderRadius: pw.BorderRadius.circular(6),
+                        ),
+                        child: pw.Text(
+                          'CLINICAL TOKEN',
+                          style: pw.TextStyle(
+                            fontSize: 11,
+                            fontWeight: pw.FontWeight.bold,
+                            color: PdfColors.teal900,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                pw.SizedBox(height: 24),
+
+                pw.Center(
+                  child: pw.Container(
+                    width: 320,
+                    padding: const pw.EdgeInsets.all(16),
+                    decoration: pw.BoxDecoration(
+                      border: pw.Border.all(color: PdfColors.teal800, width: 2.5),
+                      borderRadius: pw.BorderRadius.circular(16),
+                      color: PdfColors.teal50,
+                    ),
+                    child: pw.Column(
+                      children: [
+                        pw.Text(
+                          'DAILY PATIENT QUEUE NUMBER',
+                          style: pw.TextStyle(
+                            fontSize: 11,
+                            fontWeight: pw.FontWeight.bold,
+                            color: PdfColors.teal900,
+                          ),
+                        ),
+                        pw.SizedBox(height: 8),
+                        pw.Text(
+                          'TOKEN #${tokenNumber.toString().padLeft(2, '0')}',
+                          style: pw.TextStyle(
+                            fontSize: 36,
+                            fontWeight: pw.FontWeight.bold,
+                            color: PdfColors.teal900,
+                          ),
+                        ),
+                        pw.SizedBox(height: 8),
+                        pw.Container(
+                          padding: const pw.EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                          decoration: pw.BoxDecoration(
+                            color: PdfColors.teal800,
+                            borderRadius: pw.BorderRadius.circular(12),
+                          ),
+                          child: pw.Text(
+                            'ESTIMATED WAIT TIME: ~$estWaitMins MINS',
+                            style: pw.TextStyle(
+                              fontSize: 10,
+                              fontWeight: pw.FontWeight.bold,
+                              color: PdfColors.white,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                pw.SizedBox(height: 24),
+
+                pw.Container(
+                  padding: const pw.EdgeInsets.all(16),
+                  decoration: pw.BoxDecoration(
+                    border: pw.Border.all(color: PdfColors.grey300),
+                    borderRadius: pw.BorderRadius.circular(12),
+                  ),
+                  child: pw.Column(
+                    children: [
+                      _buildA4Row('Patient Name:', apt.patientName, 'Phone Number:', apt.phoneNumber),
+                      pw.Divider(color: PdfColors.grey200, height: 16),
+                      _buildA4Row('Treatment Type:', apt.treatmentType, 'Doctor Assigned:', 'Dr. Bashir Ahmad'),
+                      pw.Divider(color: PdfColors.grey200, height: 16),
+                      _buildA4Row('Appointment Time:', '$dateStr @ $timeStr', 'Queue Status:', apt.status.toUpperCase()),
+                      pw.Divider(color: PdfColors.grey200, height: 16),
+                      _buildA4Row('Consultation Fee:', 'Rs. ${apt.amount.toStringAsFixed(0)}', 'Payment Status:', apt.paymentStatus.toUpperCase()),
+                    ],
+                  ),
+                ),
+                pw.SizedBox(height: 24),
+
+                pw.Row(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Expanded(
+                      flex: 3,
+                      child: pw.Container(
+                        padding: const pw.EdgeInsets.all(12),
+                        decoration: pw.BoxDecoration(
+                          color: PdfColors.amber50,
+                          border: pw.Border.all(color: PdfColors.amber300),
+                          borderRadius: pw.BorderRadius.circular(8),
+                        ),
+                        child: pw.Column(
+                          crossAxisAlignment: pw.CrossAxisAlignment.start,
+                          children: [
+                            pw.Text('📌 IMPORTANT PATIENT INSTRUCTIONS:', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.amber900)),
+                            pw.SizedBox(height: 4),
+                            pw.Text('1. Please remain in the reception waiting area until your Token Number is announced.', style: const pw.TextStyle(fontSize: 9)),
+                            pw.Text('2. Hand this official token slip to the consultant upon entering the examination room.', style: const pw.TextStyle(fontSize: 9)),
+                            pw.Text('3. For emergency inquiries, contact the reception desk immediately.', style: const pw.TextStyle(fontSize: 9)),
+                          ],
+                        ),
+                      ),
+                    ),
+                    pw.SizedBox(width: 16),
+                    pw.Expanded(
+                      flex: 2,
+                      child: pw.Container(
+                        height: 90,
+                        padding: const pw.EdgeInsets.all(8),
+                        decoration: pw.BoxDecoration(
+                          border: pw.Border.all(color: PdfColors.grey400, style: pw.BorderStyle.dashed),
+                          borderRadius: pw.BorderRadius.circular(8),
+                        ),
+                        child: pw.Column(
+                          mainAxisAlignment: pw.MainAxisAlignment.center,
+                          children: [
+                            pw.Text('RECEPTION STAMP / SIGN', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+                            pw.SizedBox(height: 20),
+                            pw.Text('Verified by GCT Reception', style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            );
+          },
+        ),
+      );
+
+      await Printing.layoutPdf(
+        onLayout: (format) async => doc.save(),
+        name: 'A4_Token_Slip_${apt.patientName.replaceAll(' ', '_')}.pdf',
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('A4 print failed: $e', style: GoogleFonts.poppins()),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    }
+  }
+
+  pw.Widget _buildA4Row(String label1, String val1, String label2, String val2) {
+    return pw.Row(
+      children: [
+        pw.Expanded(
+          child: pw.Row(
+            children: [
+              pw.Text(label1, style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
+              pw.SizedBox(width: 6),
+              pw.Expanded(child: pw.Text(val1, style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold))),
+            ],
+          ),
+        ),
+        pw.SizedBox(width: 16),
+        pw.Expanded(
+          child: pw.Row(
+            children: [
+              pw.Text(label2, style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
+              pw.SizedBox(width: 6),
+              pw.Expanded(child: pw.Text(val2, style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold))),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showTokenPrintPreviewDialog(Appointment apt, int tokenNumber, int estWaitMins) {
+    final tokenStr = 'TOKEN #${tokenNumber.toString().padLeft(2, '0')}';
+    final cs = Theme.of(context).colorScheme;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: cs.primary.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.print_rounded, color: cs.primary, size: 24),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Patient Reception Token Slip',
+                style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? const Color(0xFF1E293B)
+                    : const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: cs.primary.withValues(alpha: 0.35), width: 2),
+                boxShadow: [
+                  BoxShadow(
+                    color: cs.primary.withValues(alpha: 0.08),
+                    blurRadius: 16,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Column(
+                children: [
+                  Text(
+                    'GONSTEAD CHIROPRACTIC CLINIC',
+                    style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w900, color: cs.primary, letterSpacing: 0.5),
+                  ),
+                  Text(
+                    'Dr. Bashir Ahmad • Patient Reception Slip',
+                    style: GoogleFonts.poppins(fontSize: 10, color: cs.onSurface.withValues(alpha: 0.6)),
+                  ),
+                  const Divider(height: 24),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: cs.primary.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: cs.primary, width: 2),
+                    ),
+                    child: Text(
+                      tokenStr,
+                      style: GoogleFonts.poppins(fontSize: 26, fontWeight: FontWeight.w900, color: cs.primary, letterSpacing: 1),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    apt.patientName,
+                    style: GoogleFonts.poppins(fontSize: 15, fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    '${apt.treatmentType} • ${apt.phoneNumber}',
+                    style: GoogleFonts.poppins(fontSize: 11, color: cs.onSurface.withValues(alpha: 0.7)),
+                  ),
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.shade700.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.timer_outlined, size: 14, color: Colors.amber.shade800),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Est. Wait: ~$estWaitMins mins',
+                          style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.amber.shade900),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actionsPadding: const EdgeInsets.all(16),
+        actions: [
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    _printThermalTokenSlip(
+                      apt: apt,
+                      tokenNumber: tokenNumber,
+                      estWaitMins: estWaitMins,
+                    );
+                  },
+                  icon: const Icon(Icons.receipt_long_rounded, size: 16),
+                  label: Text('58mm POS', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 11)),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    _printA4TokenSlip(
+                      apt: apt,
+                      tokenNumber: tokenNumber,
+                      estWaitMins: estWaitMins,
+                    );
+                  },
+                  icon: const Icon(Icons.print_rounded, size: 16),
+                  label: Text('A4 Slip', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 11)),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildAppointmentsList(
     List<Appointment> appointments, {
     bool shrinkWrap = false,
@@ -1715,9 +2602,16 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
             ? DateFormat('EEE, MMM d').format(apt.scheduledAt!.toLocal())
             : 'Unscheduled';
         final isEmergency = apt.isEmergency;
+        final tokenStr = 'TOKEN #${(index + 1).toString().padLeft(2, '0')}';
+        final estWaitMins = (index * 15 + 5);
+        final isArrived = apt.status.toLowerCase() == 'arrived' ||
+            apt.status.toLowerCase() == 'waiting room' ||
+            apt.status.toLowerCase() == 'in waiting room';
 
-        final statusCol = statusColor(apt.status);
-        final statusBg = statusBgColor(apt.status);
+        final statusCol = isArrived ? Colors.green : statusColor(apt.status);
+        final statusBg = isArrived
+            ? Colors.green.withValues(alpha: 0.15)
+            : statusBgColor(apt.status);
 
         return Padding(
           padding: const EdgeInsets.only(bottom: 12.0),
@@ -1728,220 +2622,331 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen> {
               borderRadius: BorderRadius.circular(20),
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
-                child: Row(
+                child: Column(
                   children: [
-                    // Time and Date column
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: cs.primary.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            timeStr,
-                            style: GoogleFonts.poppins(
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                              color: cs.primary,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            dateStr,
-                            style: GoogleFonts.poppins(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              color: cs.onSurface.withValues(alpha: 0.55),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 14),
-
-                    // Patient name and Treatment type
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  apt.patientName,
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w700,
-                                    color: cs.onSurface,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              if (isEmergency) ...[
-                                const SizedBox(width: 6),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                    vertical: 2,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.statusCancelledBg,
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Text(
-                                    'EMERGENCY',
-                                    style: GoogleFonts.poppins(
-                                      fontSize: 8,
-                                      fontWeight: FontWeight.w800,
-                                      color: AppColors.statusCancelled,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            apt.treatmentType,
-                            style: GoogleFonts.poppins(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              color: cs.primary,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Row(
-                            children: [
-                              // Payment Status Badge
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 3,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: apt.paymentStatus == 'paid'
-                                      ? Colors.green.withValues(alpha: 0.12)
-                                      : Colors.orange.withValues(alpha: 0.12),
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(
-                                    color: apt.paymentStatus == 'paid'
-                                        ? Colors.green.withValues(alpha: 0.2)
-                                        : Colors.orange.withValues(alpha: 0.2),
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      apt.paymentStatus == 'paid'
-                                          ? Icons.check_circle_rounded
-                                          : Icons.info_rounded,
-                                      size: 10,
-                                      color: apt.paymentStatus == 'paid'
-                                          ? Colors.green
-                                          : Colors.orange,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      apt.paymentStatus == 'paid'
-                                          ? 'PAID (Online)'
-                                          : 'UNPAID (Pay at Clinic)',
-                                      style: GoogleFonts.poppins(
-                                        fontSize: 9,
-                                        fontWeight: FontWeight.bold,
-                                        color: apt.paymentStatus == 'paid'
-                                            ? Colors.green
-                                            : Colors.orange,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              if (apt.paymentMethod == 'online' &&
-                                  apt.paymentStatus == 'pending') ...[
-                                const SizedBox(width: 8),
-                                TextButton.icon(
-                                  onPressed: () => _retryPayment(apt),
-                                  icon: const Icon(
-                                    Icons.payment_rounded,
-                                    size: 12,
-                                  ),
-                                  label: const Text('Pay Now'),
-                                  style: TextButton.styleFrom(
-                                    backgroundColor: Colors.blueAccent
-                                        .withValues(alpha: 0.1),
-                                    foregroundColor: Colors.blueAccent,
-                                    textStyle: GoogleFonts.poppins(
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 0,
-                                    ),
-                                    minimumSize: Size.zero,
-                                    tapTargetSize:
-                                        MaterialTapTargetSize.shrinkWrap,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-
-                    // Status Badge & Action button
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
+                    // Top Token Banner
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 10,
-                            vertical: 4,
+                            vertical: 3,
                           ),
                           decoration: BoxDecoration(
-                            color: statusBg,
-                            borderRadius: BorderRadius.circular(12),
+                            color: cs.primary.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: cs.primary.withValues(alpha: 0.25),
+                            ),
                           ),
                           child: Text(
-                            apt.status,
+                            tokenStr,
                             style: GoogleFonts.poppins(
                               fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              color: statusCol,
+                              fontWeight: FontWeight.w800,
+                              color: cs.primary,
+                              letterSpacing: 0.5,
                             ),
                           ),
                         ),
-                        const SizedBox(height: 6),
                         Row(
                           children: [
-                            IconButton(
-                              icon: Icon(
-                                Icons.phone_rounded,
-                                color: cs.primary,
-                                size: 18,
-                              ),
-                              onPressed: () => _makeCall(apt.phoneNumber),
-                              style: IconButton.styleFrom(
-                                padding: EdgeInsets.zero,
-                                visualDensity: VisualDensity.compact,
+                            Icon(
+                              Icons.timer_outlined,
+                              size: 12,
+                              color: cs.onSurface.withValues(alpha: 0.6),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Est. Wait: $estWaitMins mins',
+                              style: GoogleFonts.poppins(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: cs.onSurface.withValues(alpha: 0.6),
                               ),
                             ),
-                            Icon(
-                              Icons.chevron_right_rounded,
-                              color: cs.onSurface.withValues(alpha: 0.3),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        // Time and Date column
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: cs.primary.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                timeStr,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: cs.primary,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                dateStr,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  color: cs.onSurface.withValues(alpha: 0.55),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+
+                        // Patient name and Treatment type
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      apt.patientName,
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w700,
+                                        color: cs.onSurface,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  if (isEmergency) ...[
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                        vertical: 2,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.statusCancelledBg,
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        'EMERGENCY',
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 8,
+                                          fontWeight: FontWeight.w800,
+                                          color: AppColors.statusCancelled,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                apt.treatmentType,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  color: cs.primary,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Wrap(
+                                spacing: 6,
+                                runSpacing: 4,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                children: [
+                                  // Payment Status Badge
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 3,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: apt.paymentStatus == 'paid'
+                                          ? Colors.green.withValues(alpha: 0.12)
+                                          : Colors.orange.withValues(alpha: 0.12),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(
+                                        color: apt.paymentStatus == 'paid'
+                                            ? Colors.green.withValues(alpha: 0.2)
+                                            : Colors.orange.withValues(alpha: 0.2),
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          apt.paymentStatus == 'paid'
+                                              ? Icons.check_circle_rounded
+                                              : Icons.info_rounded,
+                                          size: 10,
+                                          color: apt.paymentStatus == 'paid'
+                                              ? Colors.green
+                                              : Colors.orange,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          apt.paymentStatus == 'paid'
+                                              ? 'PAID (Online)'
+                                              : 'UNPAID',
+                                          style: GoogleFonts.poppins(
+                                            fontSize: 9,
+                                            fontWeight: FontWeight.bold,
+                                            color: apt.paymentStatus == 'paid'
+                                                ? Colors.green
+                                                : Colors.orange,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  if (apt.paymentMethod == 'online' &&
+                                      apt.paymentStatus == 'pending') ...[
+                                    TextButton.icon(
+                                      onPressed: () => _retryPayment(apt),
+                                      icon: const Icon(
+                                        Icons.payment_rounded,
+                                        size: 12,
+                                      ),
+                                      label: const Text('Pay Now'),
+                                      style: TextButton.styleFrom(
+                                        backgroundColor: Colors.blueAccent
+                                            .withValues(alpha: 0.12),
+                                        foregroundColor: Colors.blueAccent,
+                                        textStyle: GoogleFonts.poppins(
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 2,
+                                        ),
+                                        minimumSize: Size.zero,
+                                        tapTargetSize:
+                                            MaterialTapTargetSize.shrinkWrap,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+
+                        // Status Badge & 1-Tap Arrived button
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: statusBg,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                isArrived ? 'ARRIVED 🟢' : apt.status,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: statusCol,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            if (!isArrived &&
+                                apt.status.toLowerCase() != 'completed' &&
+                                apt.status.toLowerCase() != 'cancelled') ...[
+                              InkWell(
+                                onTap: () => _markPatientArrived(apt, tokenStr),
+                                borderRadius: BorderRadius.circular(8),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.green.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: Colors.green.withValues(alpha: 0.4),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(
+                                        Icons.notifications_active_rounded,
+                                        size: 12,
+                                        color: Colors.green,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'Mark Arrived',
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.w800,
+                                          color: Colors.green,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                            ],
+                            Row(
+                              children: [
+                                IconButton(
+                                  icon: Icon(
+                                    Icons.print_rounded,
+                                    color: cs.primary,
+                                    size: 18,
+                                  ),
+                                  tooltip: 'Print Thermal Token Slip',
+                                  onPressed: () => _showTokenPrintPreviewDialog(
+                                    apt,
+                                    index + 1,
+                                    estWaitMins,
+                                  ),
+                                  style: IconButton.styleFrom(
+                                    padding: EdgeInsets.zero,
+                                    visualDensity: VisualDensity.compact,
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: Icon(
+                                    Icons.phone_rounded,
+                                    color: cs.primary,
+                                    size: 18,
+                                  ),
+                                  onPressed: () => _makeCall(apt.phoneNumber),
+                                  style: IconButton.styleFrom(
+                                    padding: EdgeInsets.zero,
+                                    visualDensity: VisualDensity.compact,
+                                  ),
+                                ),
+                                Icon(
+                                  Icons.chevron_right_rounded,
+                                  color: cs.onSurface.withValues(alpha: 0.3),
+                                ),
+                              ],
                             ),
                           ],
                         ),

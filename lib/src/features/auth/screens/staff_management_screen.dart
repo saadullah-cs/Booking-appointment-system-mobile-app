@@ -3,8 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:intl/intl.dart';
+
 import '../../shared/widgets/app_shell_scaffold.dart';
 import '../../shared/widgets/premium_card.dart';
+import '../../../services/staff_activity_logger.dart';
 import '../../../theme/app_theme.dart';
 import '../auth_providers.dart';
 
@@ -18,6 +21,7 @@ class StaffManagementScreen extends ConsumerStatefulWidget {
 
 class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen> {
   bool _allowStaffView = true;
+  bool _allowStaffPaymentQuickView = false;
   List<Map<String, String>> _staffList = [];
   bool _isLoading = true;
   String _previewTab = 'login';
@@ -32,10 +36,12 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen> {
     setState(() => _isLoading = true);
     final authRepo = ref.read(authRepositoryProvider);
     final toggle = await authRepo.getStaffViewToggle();
+    final paymentToggle = await authRepo.getStaffPaymentQuickViewToggle();
     final list = await authRepo.loadStaffCredentials();
     if (!mounted) return;
     setState(() {
       _allowStaffView = toggle;
+      _allowStaffPaymentQuickView = paymentToggle;
       _staffList = list;
       _isLoading = false;
     });
@@ -48,6 +54,16 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen> {
       value
           ? 'Staff access enabled. Appointments can be viewed online.'
           : 'Staff access disabled. Appointments hidden.',
+    );
+  }
+
+  Future<void> _togglePaymentQuickViewAccess(bool value) async {
+    setState(() => _allowStaffPaymentQuickView = value);
+    await ref.read(authRepositoryProvider).setStaffPaymentQuickViewToggle(value);
+    _showSnackBar(
+      value
+          ? 'Staff Payment Quick View enabled. Revenue summary visible to staff.'
+          : 'Staff Payment Quick View disabled. Revenue summary hidden from staff.',
     );
   }
 
@@ -232,6 +248,51 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen> {
     }
   }
 
+  Future<void> _clearStaffLogs() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(
+          'Clear Staff Audit Logs',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w700),
+        ),
+        content: Text(
+          'Are you sure you want to permanently clear all staff activity audit logs?',
+          style: GoogleFonts.poppins(),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.poppins(
+                color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.6),
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(
+              'Clear All Logs',
+              style: GoogleFonts.poppins(
+                color: Theme.of(ctx).colorScheme.error,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+    try {
+      await StaffActivityLogger().clearAllLogs();
+      _showSnackBar('All staff activity logs cleared successfully.');
+    } catch (e) {
+      _showSnackBar('Failed to clear logs: $e', isError: true);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -329,6 +390,40 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen> {
                       ? Icons.visibility_rounded
                       : Icons.visibility_off_rounded,
                   color: _allowStaffView ? cs.primary : Colors.grey,
+                  size: 20,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          PremiumCard(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: SwitchListTile.adaptive(
+              value: _allowStaffPaymentQuickView,
+              onChanged: _togglePaymentQuickViewAccess,
+              title: Text(
+                'Show Payment Quick View to Staff',
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
+              ),
+              subtitle: Text(
+                'Enable or disable revenue & payment metrics on Staff Dashboard.',
+                style: GoogleFonts.poppins(fontSize: 12),
+              ),
+              secondary: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: (_allowStaffPaymentQuickView ? cs.primary : Colors.grey)
+                      .withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  _allowStaffPaymentQuickView
+                      ? Icons.payments_rounded
+                      : Icons.payments_outlined,
+                  color: _allowStaffPaymentQuickView ? cs.primary : Colors.grey,
                   size: 20,
                 ),
               ),
@@ -466,6 +561,117 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen> {
                 },
               ),
             ),
+
+          const SizedBox(height: 24),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'STAFF ACTIVITY AUDIT LOGS',
+                style: GoogleFonts.poppins(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: cs.primary,
+                  letterSpacing: 0.5,
+                ),
+              ),
+              TextButton.icon(
+                onPressed: _clearStaffLogs,
+                icon: const Icon(Icons.delete_sweep_rounded, size: 16),
+                label: Text(
+                  'Clear Logs',
+                  style: GoogleFonts.poppins(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: cs.error,
+                  ),
+                ),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  foregroundColor: cs.error,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          StreamBuilder<List<StaffActivityLog>>(
+            stream: StaffActivityLogger().streamLogs(),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                return PremiumCard(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      Icon(Icons.history_rounded, color: cs.onSurface.withValues(alpha: 0.4), size: 20),
+                      const SizedBox(width: 10),
+                      Text(
+                        'No staff audit activity recorded yet.',
+                        style: GoogleFonts.poppins(fontSize: 12, color: cs.onSurface.withValues(alpha: 0.6)),
+                      ),
+                    ],
+                  ),
+                );
+              }
+              final logs = snapshot.data!.take(10).toList();
+              return PremiumCard(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  children: logs.map((log) {
+                    final timeStr = DateFormat('MMM d, HH:mm:ss').format(log.timestamp);
+                    final isLogin = log.action.toLowerCase().contains('login');
+                    final isLogout = log.action.toLowerCase().contains('logout');
+                    final color = isLogin ? Colors.green : (isLogout ? Colors.orange : cs.primary);
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: color.withValues(alpha: 0.1),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              isLogin ? Icons.login_rounded : (isLogout ? Icons.logout_rounded : Icons.touch_app_rounded),
+                              color: color,
+                              size: 14,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '${log.staffEmail} — ${log.action}',
+                                  style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold, color: cs.onSurface),
+                                ),
+                                Text(
+                                  '${log.featureUsed} • $timeStr',
+                                  style: GoogleFonts.poppins(fontSize: 10, color: cs.onSurface.withValues(alpha: 0.5)),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: color.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              log.action.toUpperCase(),
+                              style: GoogleFonts.poppins(fontSize: 8.5, fontWeight: FontWeight.w700, color: color),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ),
+              );
+            },
+          ),
 
           if (!isWide) ...[
             const SizedBox(height: 24),

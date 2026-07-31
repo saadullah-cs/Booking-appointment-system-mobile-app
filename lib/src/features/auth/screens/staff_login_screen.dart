@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../shared/widgets/premium_card.dart';
 import '../../../services/app_preferences.dart';
+import '../../../services/staff_activity_logger.dart';
 import '../../../theme/app_theme.dart';
 import '../auth_providers.dart';
 
@@ -39,6 +40,29 @@ class _StaffLoginScreenState extends ConsumerState<StaffLoginScreen>
       CurvedAnimation(parent: _animController, curve: Curves.easeOutCubic),
     );
     _animController.forward();
+    _checkAutoLogin();
+  }
+
+  Future<void> _checkAutoLogin() async {
+    final prefs = await AppPreferences.instance.prefs;
+    final isStaffLoggedIn = prefs.getBool('is_staff_logged_in') ?? false;
+    if (isStaffLoggedIn) {
+      if (mounted) {
+        final staffEmail = prefs.getString('logged_in_staff_email') ?? '';
+        final staffPinEnabled =
+            prefs.getBool('staff_pin_enabled_$staffEmail') ?? false;
+        final staffPinCode =
+            prefs.getString('staff_pin_code_$staffEmail') ?? '';
+        final staffUnlocked =
+            prefs.getBool('staff_unlocked_$staffEmail') ?? false;
+
+        if ((staffPinEnabled || staffPinCode.isNotEmpty) && !staffUnlocked) {
+          context.go('/staff-lock');
+        } else {
+          context.go('/staff-dashboard');
+        }
+      }
+    }
   }
 
   @override
@@ -93,6 +117,13 @@ class _StaffLoginScreenState extends ConsumerState<StaffLoginScreen>
 
         final staffPinEnabled =
             prefs.getBool('staff_pin_enabled_$email') ?? false;
+
+        // Log staff login activity
+        await StaffActivityLogger().logActivity(
+          staffEmail: email,
+          action: 'Login',
+          featureUsed: 'Staff Login Screen',
+        );
 
         _showSnackBar('Welcome to the Staff Portal! 🎉');
         if (!mounted) return;

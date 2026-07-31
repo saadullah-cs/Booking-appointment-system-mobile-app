@@ -18,6 +18,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../services/repository_providers.dart';
 import '../../services/payment_gateway_service.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'widgets/visual_calendar_widget.dart';
 
 class AppointmentsListScreen extends ConsumerStatefulWidget {
   const AppointmentsListScreen({super.key});
@@ -33,6 +34,7 @@ class _AppointmentsListScreenState extends ConsumerState<AppointmentsListScreen>
       ref.read(appointmentRepositoryProvider);
   List<Appointment> _appointments = [];
   bool _isLoading = false;
+  bool _isCalendarView = false;
   final _searchController = TextEditingController();
   String _searchQuery = '';
   String _selectedDuration = 'All';
@@ -465,6 +467,15 @@ class _AppointmentsListScreenState extends ConsumerState<AppointmentsListScreen>
       currentRoute: '/appointments',
       actions: [
         IconButton(
+          icon: Icon(
+            _isCalendarView
+                ? Icons.format_list_bulleted_rounded
+                : Icons.calendar_month_rounded,
+          ),
+          onPressed: () => setState(() => _isCalendarView = !_isCalendarView),
+          tooltip: _isCalendarView ? 'Switch to List View' : 'Switch to Calendar View',
+        ),
+        IconButton(
           icon: const Icon(Icons.download_rounded),
           onPressed: _exportAppointments,
           tooltip: 'Export Appointments',
@@ -674,65 +685,83 @@ class _AppointmentsListScreenState extends ConsumerState<AppointmentsListScreen>
             duration: const Duration(milliseconds: 220),
           ),
 
-          // Tab bar selection
-          Container(
-            margin: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-            decoration: BoxDecoration(
-              color: cs.surface,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: cs.outline.withValues(alpha: 0.12)),
+          if (_isCalendarView)
+            Expanded(
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                padding: const EdgeInsets.all(16),
+                child: VisualCalendarWidget(
+                  appointments: _appointments,
+                  onAppointmentTap: (apt) {
+                    context.push('/appointment/${apt.id}', extra: apt);
+                  },
+                  onEmptySlotTap: (slotTime) {
+                    context.push('/booking');
+                  },
+                ),
+              ),
+            )
+          else ...[
+            // Tab bar selection
+            Container(
+              margin: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+              decoration: BoxDecoration(
+                color: cs.surface,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: cs.outline.withValues(alpha: 0.12)),
+              ),
+              child: TabBar(
+                controller: _tabController,
+                labelStyle: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 11.5,
+                ),
+                unselectedLabelStyle: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w500,
+                  fontSize: 11.5,
+                ),
+                labelColor: cs.primary,
+                unselectedLabelColor: cs.onSurface.withValues(alpha: 0.5),
+                indicator: BoxDecoration(
+                  color: cs.primary.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                tabs: [
+                  Tab(text: 'Upcoming (${upcoming.length})'),
+                  Tab(text: 'Past (${past.length})'),
+                  Tab(text: 'Cancelled (${cancelled.length})'),
+                ],
+              ),
             ),
-            child: TabBar(
-              controller: _tabController,
-              labelStyle: GoogleFonts.poppins(
-                fontWeight: FontWeight.w700,
-                fontSize: 11.5,
-              ),
-              unselectedLabelStyle: GoogleFonts.poppins(
-                fontWeight: FontWeight.w500,
-                fontSize: 11.5,
-              ),
-              labelColor: cs.primary,
-              unselectedLabelColor: cs.onSurface.withValues(alpha: 0.5),
-              indicator: BoxDecoration(
-                color: cs.primary.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              tabs: [
-                Tab(text: 'Upcoming (${upcoming.length})'),
-                Tab(text: 'Past (${past.length})'),
-                Tab(text: 'Cancelled (${cancelled.length})'),
-              ],
-            ),
-          ),
 
-          Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : TabBarView(
-                    controller: _tabController,
-                    children: [
-                      _AppointmentListView(
-                        appointments: upcoming,
-                        onRefresh: _load,
-                        emptyMessage: 'No upcoming appointments',
-                        onRetryPayment: _retryPayment,
-                      ),
-                      _AppointmentListView(
-                        appointments: past,
-                        onRefresh: _load,
-                        emptyMessage: 'No past appointments',
-                        onRetryPayment: _retryPayment,
-                      ),
-                      _AppointmentListView(
-                        appointments: cancelled,
-                        onRefresh: _load,
-                        emptyMessage: 'No cancelled appointments',
-                        onRetryPayment: _retryPayment,
-                      ),
-                    ],
-                  ),
-          ),
+            Expanded(
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : TabBarView(
+                      controller: _tabController,
+                      children: [
+                        _AppointmentListView(
+                          appointments: upcoming,
+                          onRefresh: _load,
+                          emptyMessage: 'No upcoming appointments',
+                          onRetryPayment: _retryPayment,
+                        ),
+                        _AppointmentListView(
+                          appointments: past,
+                          onRefresh: _load,
+                          emptyMessage: 'No past appointments',
+                          onRetryPayment: _retryPayment,
+                        ),
+                        _AppointmentListView(
+                          appointments: cancelled,
+                          onRefresh: _load,
+                          emptyMessage: 'No cancelled appointments',
+                          onRetryPayment: _retryPayment,
+                        ),
+                      ],
+                    ),
+            ),
+          ],
         ],
       ),
     );

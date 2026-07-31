@@ -13,6 +13,7 @@ import '../shared/widgets/premium_card.dart';
 import 'clinical_notes_repository.dart';
 import 'note_template_repository.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../theme/app_theme.dart';
 import '../../services/repository_providers.dart';
 import '../../services/notification_service.dart';
 
@@ -51,6 +52,7 @@ class _ClinicalNotesScreenState extends ConsumerState<ClinicalNotesScreen> {
   String _selectedCategory = 'General';
   String _selectedDuration = 'All';
   ClinicalNote? _editingNote;
+  DateTime? _reminderDateTime;
 
   static const _categories = [
     'General',
@@ -310,11 +312,32 @@ class _ClinicalNotesScreenState extends ConsumerState<ClinicalNotesScreen> {
       );
 
       try {
-        await NotificationService().showLocalNotification(
-          'Clinical Note Saved 📝',
-          'Added a $category note for $patientName.',
-          payload: '/notes',
-        );
+        if (_reminderDateTime != null && _reminderDateTime!.isAfter(DateTime.now())) {
+          final reminderId = DateTime.now().millisecondsSinceEpoch.remainder(100000);
+          await NotificationService().scheduleLocalNotification(
+            id: reminderId,
+            title: 'Clinical Note Reminder ⏰',
+            body: 'Follow up on $category note for $patientName.',
+            scheduledDate: _reminderDateTime!,
+            payload: '/notes',
+          );
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'Reminder scheduled for ${DateFormat('MMM d, y - hh:mm a').format(_reminderDateTime!)} ⏰',
+                ),
+                backgroundColor: AppColors.statusConfirmed,
+              ),
+            );
+          }
+        } else {
+          await NotificationService().showLocalNotification(
+            'Clinical Note Saved 📝',
+            'Added a $category note for $patientName.',
+            payload: '/notes',
+          );
+        }
       } catch (e) {
         debugPrint('Note notification failed: $e');
       }
@@ -341,6 +364,7 @@ class _ClinicalNotesScreenState extends ConsumerState<ClinicalNotesScreen> {
       _selectedCategory = 'General';
       _useSoap = true;
       _editingNote = null;
+      _reminderDateTime = null;
     });
   }
 
@@ -430,8 +454,10 @@ class _ClinicalNotesScreenState extends ConsumerState<ClinicalNotesScreen> {
     }
   }
 
-  int _categoryIndex(String cat) =>
-      _categories.indexOf(cat).clamp(0, _categories.length - 1);
+  int _categoryIndex(String cat) {
+    final normalized = cat == 'Objective AI Analysis' ? 'Posture' : cat;
+    return _categories.indexOf(normalized).clamp(0, _categories.length - 1);
+  }
 
   bool _matchesDuration(DateTime date) {
     if (_selectedDuration == 'All') return true;
@@ -733,6 +759,86 @@ class _ClinicalNotesScreenState extends ConsumerState<ClinicalNotesScreen> {
                         : null),
             ),
           ],
+          const SizedBox(height: 12),
+          // Set Reminder Date & Time Selector Tile
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: cs.primary.withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: cs.primary.withValues(alpha: 0.15)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Row(
+                    children: [
+                      Icon(Icons.alarm_add_rounded, color: cs.primary, size: 20),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Schedule Note Reminder',
+                              style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold, color: cs.onSurface),
+                            ),
+                            Text(
+                              _reminderDateTime == null
+                                  ? 'Tap to select exact date & time'
+                                  : DateFormat('EEE, MMM d, y - hh:mm a').format(_reminderDateTime!),
+                              style: GoogleFonts.poppins(
+                                fontSize: 11,
+                                color: _reminderDateTime == null ? cs.onSurface.withValues(alpha: 0.5) : cs.primary,
+                                fontWeight: _reminderDateTime == null ? FontWeight.normal : FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (_reminderDateTime != null)
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded, size: 18, color: Colors.grey),
+                    onPressed: () => setState(() => _reminderDateTime = null),
+                  )
+                else
+                  TextButton.icon(
+                    onPressed: () async {
+                      final now = DateTime.now();
+                      final date = await showDatePicker(
+                        context: context,
+                        initialDate: now.add(const Duration(minutes: 30)),
+                        firstDate: now,
+                        lastDate: now.add(const Duration(days: 365)),
+                      );
+                      if (date == null || !mounted) return;
+
+                      final time = await showTimePicker(
+                        context: context,
+                        initialTime: TimeOfDay.fromDateTime(now.add(const Duration(minutes: 30))),
+                      );
+                      if (time == null || !mounted) return;
+
+                      setState(() {
+                        _reminderDateTime = DateTime(
+                          date.year,
+                          date.month,
+                          date.day,
+                          time.hour,
+                          time.minute,
+                        );
+                      });
+                    },
+                    icon: const Icon(Icons.calendar_today_rounded, size: 14),
+                    label: Text('Set Date & Time', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold)),
+                  ),
+              ],
+            ),
+          ),
           const SizedBox(height: 16),
 
           // Save Button
@@ -1002,7 +1108,9 @@ class _ClinicalNotesScreenState extends ConsumerState<ClinicalNotesScreen> {
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(
-                              note.category.toUpperCase(),
+                              (note.category == 'Objective AI Analysis'
+                                      ? 'POSTURE'
+                                      : note.category.toUpperCase()),
                               style: GoogleFonts.poppins(
                                 fontSize: 8.5,
                                 fontWeight: FontWeight.w700,

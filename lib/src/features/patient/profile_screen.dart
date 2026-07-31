@@ -869,62 +869,7 @@ class _PatientProfileScreenState extends ConsumerState<PatientProfileScreen> {
                     ),
                   ),
                 ),
-                const Divider(height: 1, indent: 16, endIndent: 16),
-                ListTile(
-                  leading: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppColors.statusConfirmed.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(
-                      Icons.analytics_rounded,
-                      color: AppColors.statusConfirmed,
-                      size: 20,
-                    ),
-                  ),
-                  title: Text(
-                    'Analytics',
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
-                    ),
-                  ),
-                  subtitle: Text(
-                    'View appointment statistics',
-                    style: GoogleFonts.poppins(fontSize: 12),
-                  ),
-                  trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () => context.push('/analytics'),
-                ),
-                const Divider(height: 1, indent: 16, endIndent: 16),
-                ListTile(
-                  leading: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppColors.statusPending.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(
-                      Icons.calculate_rounded,
-                      color: AppColors.statusPending,
-                      size: 20,
-                    ),
-                  ),
-                  title: Text(
-                    'Treatment Calculator',
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
-                    ),
-                  ),
-                  subtitle: Text(
-                    'Calculate treatment costs',
-                    style: GoogleFonts.poppins(fontSize: 12),
-                  ),
-                  trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () => context.push('/calculator'),
-                ),
+
                 const Divider(height: 1, indent: 16, endIndent: 16),
                 ListTile(
                   leading: Container(
@@ -976,6 +921,34 @@ class _PatientProfileScreenState extends ConsumerState<PatientProfileScreen> {
                   ),
                   subtitle: Text(
                     'Manage staff credentials and access controls',
+                    style: GoogleFonts.poppins(fontSize: 12),
+                  ),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () => context.push('/staff-management'),
+                ),
+                const Divider(height: 1, indent: 16, endIndent: 16),
+                ListTile(
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.manage_history_rounded,
+                      color: Colors.amber,
+                      size: 20,
+                    ),
+                  ),
+                  title: Text(
+                    'Staff Activity Audit Logs',
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                  subtitle: Text(
+                    'Doctor-only view of staff logins, activity & sessions',
                     style: GoogleFonts.poppins(fontSize: 12),
                   ),
                   trailing: const Icon(Icons.chevron_right_rounded),

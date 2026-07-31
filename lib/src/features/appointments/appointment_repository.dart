@@ -40,7 +40,8 @@ class AppointmentRepository {
       try {
         final snapshot = await FirebaseFirestore.instance
             .collection('appointments')
-            .get();
+            .get()
+            .timeout(const Duration(seconds: 3));
         final appointments = snapshot.docs
             .map((doc) => Appointment.fromJson({...doc.data(), 'id': doc.id}))
             .toList();
@@ -55,7 +56,7 @@ class AppointmentRepository {
         await _saveAppointments(appointments);
         return appointments;
       } catch (error) {
-        debugPrint('Failed to load appointments from Firestore: $error');
+        debugPrint('Failed/Timed out loading appointments from Firestore (using local cache): $error');
       }
     }
 
@@ -67,16 +68,21 @@ class AppointmentRepository {
       return _cachedAppointments!;
     }
 
-    final decoded = jsonDecode(raw) as List<dynamic>;
-    final appointments = decoded
-        .map(
-          (entry) =>
-              Appointment.fromJson(Map<String, dynamic>.from(entry as Map)),
-        )
-        .toList(growable: false);
-    _cachedAppointments = appointments;
-    _cachedAt = now;
-    return List<Appointment>.unmodifiable(appointments);
+    try {
+      final decoded = jsonDecode(raw) as List<dynamic>;
+      final appointments = decoded
+          .map(
+            (entry) =>
+                Appointment.fromJson(Map<String, dynamic>.from(entry as Map)),
+          )
+          .toList(growable: false);
+      _cachedAppointments = appointments;
+      _cachedAt = now;
+      return List<Appointment>.unmodifiable(appointments);
+    } catch (e) {
+      debugPrint('Error parsing cached appointments: $e');
+      return const [];
+    }
   }
 
   Future<void> _saveAppointments(List<Appointment> appointments) async {
@@ -90,41 +96,44 @@ class AppointmentRepository {
   }
 
   Future<bool> saveAppointment(Appointment appointment) async {
+    // 1. Immediately persist locally to SharedPreferences for instant offline availability
+    final currentList = await loadAppointments();
+    final filtered = currentList.where((a) => a.id != appointment.id).toList();
+    final nextList = [appointment, ...filtered];
+    await _saveAppointments(nextList);
+
+    // 2. Sync to Firestore with 3-second timeout
     bool remoteSuccess = true;
     if (_useFirestore) {
       try {
-        // Wrap with 3s timeout for offline optimism
         await FirebaseFirestore.instance
             .collection('appointments')
             .doc(appointment.id)
             .set(appointment.toJson())
             .timeout(const Duration(seconds: 3));
       } catch (error) {
-        debugPrint(
-          'Firestore save error or timeout (proceeding offline): $error',
-        );
+        debugPrint('Firestore save error or timeout (proceeding offline): $error');
         remoteSuccess = false;
-        // We catch the error so the local cache still updates
       }
     }
-    // Invalidate the cache to ensure we reload fresh list
-    _cachedAppointments = null;
-    _cachedAt = null;
-    final appointments = await loadAppointments();
-    // Prevent duplicates in local list if already loaded/updated
-    final filtered = appointments.where((a) => a.id != appointment.id).toList();
-    final next = [appointment, ...filtered];
-    await _saveAppointments(next);
     return remoteSuccess;
   }
 
   Future<Appointment?> findById(String id) async {
+    final appointments = await loadAppointments();
+    for (final appointment in appointments) {
+      if (appointment.id == id) {
+        return appointment;
+      }
+    }
+
     if (_useFirestore) {
       try {
         final doc = await FirebaseFirestore.instance
             .collection('appointments')
             .doc(id)
-            .get();
+            .get()
+            .timeout(const Duration(seconds: 3));
         if (doc.exists && doc.data() != null) {
           return Appointment.fromJson({...doc.data()!, 'id': doc.id});
         }
@@ -132,57 +141,50 @@ class AppointmentRepository {
         debugPrint('Failed to find appointment by id in Firestore: $error');
       }
     }
-    final appointments = await loadAppointments();
-    for (final appointment in appointments) {
-      if (appointment.id == id) {
-        return appointment;
-      }
-    }
     return null;
   }
 
   Future<void> updateAppointment(Appointment updatedAppointment) async {
+    // 1. Update local SharedPreferences first
+    final currentList = await loadAppointments();
+    final nextList = currentList
+        .map((item) => item.id == updatedAppointment.id ? updatedAppointment : item)
+        .toList();
+    await _saveAppointments(nextList);
+
+    // 2. Sync to Firestore in background / non-blocking with 3-second timeout
     if (_useFirestore) {
       try {
         await FirebaseFirestore.instance
             .collection('appointments')
             .doc(updatedAppointment.id)
-            .set(updatedAppointment.toJson());
+            .set(updatedAppointment.toJson())
+            .timeout(const Duration(seconds: 3));
       } catch (error) {
-        debugPrint('Failed to update appointment in Firestore: $error');
+        debugPrint('Firestore update offline queued / timed out: $error');
       }
     }
-    // Invalidate the cache
-    _cachedAppointments = null;
-    _cachedAt = null;
-    final appointments = await loadAppointments();
-    final next = appointments
-        .map(
-          (item) =>
-              item.id == updatedAppointment.id ? updatedAppointment : item,
-        )
-        .toList(growable: false);
-    await _saveAppointments(next);
   }
 
   Future<void> deleteAppointment(String appointmentId) async {
+    // 1. Delete from local SharedPreferences first
+    final currentList = await loadAppointments();
+    final nextList = currentList
+        .where((item) => item.id != appointmentId)
+        .toList();
+    await _saveAppointments(nextList);
+
+    // 2. Sync to Firestore in background / non-blocking with 3-second timeout
     if (_useFirestore) {
       try {
         await FirebaseFirestore.instance
             .collection('appointments')
             .doc(appointmentId)
-            .delete();
+            .delete()
+            .timeout(const Duration(seconds: 3));
       } catch (error) {
-        debugPrint('Failed to delete appointment in Firestore: $error');
+        debugPrint('Firestore delete offline queued / timed out: $error');
       }
     }
-    // Invalidate the cache
-    _cachedAppointments = null;
-    _cachedAt = null;
-    final appointments = await loadAppointments();
-    final next = appointments
-        .where((item) => item.id != appointmentId)
-        .toList(growable: false);
-    await _saveAppointments(next);
   }
 }

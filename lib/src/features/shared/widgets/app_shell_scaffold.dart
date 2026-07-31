@@ -39,7 +39,7 @@ class _AppShellScaffoldState extends State<AppShellScaffold>
     with WidgetsBindingObserver {
   static const _navRoutes = [
     '/dashboard',
-    '/booking',
+    '/appointments',
     '/payments',
     '/notes',
     '/profile',
@@ -49,6 +49,9 @@ class _AppShellScaffoldState extends State<AppShellScaffold>
   List<Appointment>? _cachedAppointments;
   DateTime? _cachedAppointmentsAt;
   static bool _isLockScreenShowing = false;
+
+  static final List<String> _routeHistory = [];
+  static DateTime? _lastBackClickTime;
 
   int get _navIndex {
     if (widget.currentRoute == null) return 0;
@@ -61,6 +64,13 @@ class _AppShellScaffoldState extends State<AppShellScaffold>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _checkUpcomingAppointments();
+    if (widget.currentRoute != null &&
+        (_routeHistory.isEmpty || _routeHistory.last != widget.currentRoute)) {
+      _routeHistory.add(widget.currentRoute!);
+      if (_routeHistory.length > 20) {
+        _routeHistory.removeAt(0);
+      }
+    }
   }
 
   @override
@@ -368,19 +378,43 @@ class _AppShellScaffoldState extends State<AppShellScaffold>
       onPopInvokedWithResult: (didPop, result) async {
         if (didPop) return;
 
-        // 1. If we can pop (sub-screen), pop normally
+        // 1. If we can pop (sub-screen pushed onto navigator), pop normally
         if (canPop) {
           context.pop();
           return;
         }
 
-        // 2. If we are on a secondary tab, go to Dashboard
-        if (widget.currentRoute != '/dashboard' && isNavRoute) {
+        final now = DateTime.now();
+
+        // 2. Double click back (within 1.5 seconds) -> direct to Home Dashboard
+        if (_lastBackClickTime != null &&
+            now.difference(_lastBackClickTime!) < const Duration(milliseconds: 1500)) {
+          _lastBackClickTime = null;
+          if (widget.currentRoute != '/dashboard') {
+            context.go('/dashboard');
+            return;
+          }
+        }
+
+        _lastBackClickTime = now;
+
+        // 3. Single click back: navigate to last visited page in history if available
+        if (_routeHistory.length > 1) {
+          _routeHistory.removeLast(); // remove current route
+          final previousRoute = _routeHistory.last;
+          if (previousRoute != widget.currentRoute) {
+            context.go(previousRoute);
+            return;
+          }
+        }
+
+        // 4. Fallback if not on Dashboard
+        if (widget.currentRoute != '/dashboard') {
           context.go('/dashboard');
           return;
         }
 
-        // 3. If we are on Dashboard, show Exit Confirmation
+        // 5. If we are on Dashboard, show Exit Confirmation
         final shouldExit = await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
@@ -551,9 +585,9 @@ class _AppBottomNav extends StatelessWidget {
           label: 'Home',
         ),
         NavigationDestination(
-          icon: Icon(Icons.calendar_today_outlined),
-          selectedIcon: Icon(Icons.calendar_today_rounded),
-          label: 'Book',
+          icon: Icon(Icons.event_note_outlined),
+          selectedIcon: Icon(Icons.event_note_rounded),
+          label: 'Appts',
         ),
         NavigationDestination(
           icon: Icon(Icons.account_balance_wallet_outlined),
