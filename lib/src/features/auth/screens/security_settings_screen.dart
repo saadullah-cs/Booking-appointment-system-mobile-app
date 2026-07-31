@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:local_auth/local_auth.dart';
@@ -165,6 +166,152 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
       _storedPin = confirmPin;
     });
     _showSnackBar('PIN code changed successfully! 🔑');
+  }
+
+  Future<void> _changeFirebasePassword() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      _showSnackBar('No authenticated user found.', isError: true);
+      return;
+    }
+
+    // Step 1: Enter current password to reauthenticate
+    final currentPassword = await _showPasswordInputDialog(
+      title: 'Verify Current Password',
+      description: 'Enter your current account password to continue.',
+    );
+    if (currentPassword == null || currentPassword.isEmpty) return;
+
+    try {
+      final credential = EmailAuthProvider.credential(
+        email: user.email ?? '',
+        password: currentPassword,
+      );
+      await user.reauthenticateWithCredential(credential);
+    } on FirebaseAuthException catch (e) {
+      _showSnackBar(
+        e.code == 'wrong-password'
+            ? 'Incorrect current password. Please try again.'
+            : 'Authentication failed: ${e.message}',
+        isError: true,
+      );
+      return;
+    } catch (_) {
+      _showSnackBar('Authentication failed. Please try again.', isError: true);
+      return;
+    }
+
+    // Step 2: Enter new password
+    final newPassword = await _showPasswordInputDialog(
+      title: 'Enter New Password',
+      description: 'Minimum 6 characters. Use a strong password.',
+    );
+    if (newPassword == null || newPassword.isEmpty) return;
+
+    if (newPassword.length < 6) {
+      _showSnackBar('Password must be at least 6 characters.', isError: true);
+      return;
+    }
+
+    // Step 3: Confirm new password
+    final confirmPassword = await _showPasswordInputDialog(
+      title: 'Confirm New Password',
+      description: 'Re-enter your new password to confirm.',
+    );
+    if (confirmPassword == null || confirmPassword.isEmpty) return;
+
+    if (newPassword != confirmPassword) {
+      _showSnackBar('Passwords do not match.', isError: true);
+      return;
+    }
+
+    try {
+      await user.updatePassword(newPassword);
+      _showSnackBar('Account password changed successfully! 🔐');
+    } on FirebaseAuthException catch (e) {
+      _showSnackBar('Failed to update password: ${e.message}', isError: true);
+    } catch (e) {
+      _showSnackBar('Unexpected error: $e', isError: true);
+    }
+  }
+
+  Future<String?> _showPasswordInputDialog({
+    required String title,
+    required String description,
+  }) async {
+    final controller = TextEditingController();
+    bool obscure = true;
+    return showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) {
+          final cs = Theme.of(ctx).colorScheme;
+          return AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            title: Text(
+              title,
+              style: GoogleFonts.poppins(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  description,
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    color: cs.onSurface.withValues(alpha: 0.65),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: controller,
+                  obscureText: obscure,
+                  autofocus: true,
+                  style: GoogleFonts.poppins(),
+                  decoration: InputDecoration(
+                    hintText: 'Enter password',
+                    hintStyle: GoogleFonts.poppins(),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        obscure ? Icons.visibility_off : Icons.visibility,
+                      ),
+                      onPressed: () => setS(() => obscure = !obscure),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: Text('Cancel', style: GoogleFonts.poppins()),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+                child: Text(
+                  'Continue',
+                  style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
   }
 
   void _showSnackBar(String msg, {bool isError = false}) {
@@ -495,6 +642,47 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
                     ),
                   ),
                 ],
+                const SizedBox(height: 20),
+                Text(
+                  'ACCOUNT SECURITY',
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: cs.primary,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                PremiumCard(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: ListTile(
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(
+                        Icons.key_rounded,
+                        color: Colors.orange,
+                        size: 20,
+                      ),
+                    ),
+                    title: Text(
+                      'Change Account Password',
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
+                    ),
+                    subtitle: Text(
+                      'Update your Firebase / Google account login password',
+                      style: GoogleFonts.poppins(fontSize: 12),
+                    ),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: _changeFirebasePassword,
+                  ),
+                ),
               ],
             ),
     );
