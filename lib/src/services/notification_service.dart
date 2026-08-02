@@ -399,22 +399,6 @@ class NotificationService {
   static int getPaymentReminderId(String id) =>
       (id.hashCode.abs() % 50000000) + 100000000;
 
-  Future<void> testZonedNotification(int delaySeconds) async {
-    final scheduledDate = DateTime.now().add(Duration(seconds: delaySeconds));
-    await scheduleLocalNotification(
-      id: 9999,
-      title: 'Background Test 🧪',
-      body: 'This notification was scheduled for $delaySeconds seconds delay.',
-      scheduledDate: scheduledDate,
-      payload: '/dashboard',
-    );
-    if (kDebugMode) {
-      debugPrint(
-        'Test notification scheduled for $delaySeconds seconds from now.',
-      );
-    }
-  }
-
   Future<void> scheduleLocalNotification({
     required int id,
     required String title,

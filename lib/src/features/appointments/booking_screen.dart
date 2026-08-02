@@ -419,7 +419,16 @@ class _BookingScreenState extends ConsumerState<BookingScreen>
         debugPrint('Notification scheduling failed: $e');
       }
 
-      _goStep(2);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Appointment booked successfully! 🎉'),
+            backgroundColor: AppColors.statusConfirmed,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        context.go('/appointments');
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(

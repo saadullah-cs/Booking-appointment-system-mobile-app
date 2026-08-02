@@ -1262,12 +1262,6 @@ class _QuickActionsGrid extends StatelessWidget {
           color: const Color(0xFF0F7490),
           onTap: () => context.push('/staff-management'),
         ),
-        _QuickAction(
-          icon: Icons.science_rounded,
-          label: 'Test Notif',
-          color: Colors.purpleAccent,
-          onTap: () => NotificationService().testZonedNotification(20),
-        ),
       ],
     );
   }

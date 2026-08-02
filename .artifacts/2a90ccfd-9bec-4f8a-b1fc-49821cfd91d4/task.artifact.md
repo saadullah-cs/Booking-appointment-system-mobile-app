@@ -1,4 +1,4 @@
-- `[x]` Fix `BookingScreen` disposal crash
-- `[x]` Restore root routing to `SplashEntryScreen`
-- `[x]` Harden auth validation logic in Splash screen
-- `[x]` Verify lifecycle security triggers in `AppShellScaffold`
+- `[ ]` Remove 'Test Notif' button and logic
+- `[ ]` Update `BookingScreen` success flow (SnackBar + Routing)
+- `[ ]` Fix filtering logic in `AppointmentsListScreen`
+- `[ ]` Add 'Cancel Appointment' button to details and list

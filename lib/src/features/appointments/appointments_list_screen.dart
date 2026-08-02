@@ -210,12 +210,57 @@ class _AppointmentsListScreenState extends ConsumerState<AppointmentsListScreen>
   Future<void> _deleteAppointment(String id) async {
     // Delete via provider for real-time sync
     await ref.read(appointmentsProvider.notifier).delete(id);
-    
+
     // Logic Fix: Cancel scheduled notifications on deletion
     try {
       await NotificationService().cancelAppointmentNotifications(id);
     } catch (e) {
       debugPrint('Failed to cancel notifications on delete: $e');
+    }
+  }
+
+  Future<void> _cancelAppointment(Appointment apt) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Cancel Appointment'),
+        content: Text(
+          'Are you sure you want to cancel ${apt.patientName}\'s appointment?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('No'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(
+              'Yes, Cancel',
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      final updated = apt.copyWith(
+        status: 'Cancelled',
+        updatedAt: DateTime.now(),
+      );
+      await ref.read(appointmentsProvider.notifier).update(updated);
+
+      try {
+        await NotificationService().cancelAppointmentNotifications(apt.id);
+      } catch (e) {
+        debugPrint('Failed to cancel notifications: $e');
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Appointment cancelled')),
+        );
+      }
     }
   }
 
@@ -411,17 +456,18 @@ class _AppointmentsListScreenState extends ConsumerState<AppointmentsListScreen>
         case 'upcoming':
           result = list.where((a) {
             final d = a.scheduledAt;
+            final status = a.status.toLowerCase();
             return d != null &&
                 d.isAfter(now) &&
-                a.status.toLowerCase() != 'cancelled' &&
-                a.status.toLowerCase() != 'completed';
+                (status == 'pending' || status == 'confirmed');
           }).toList()..sort((a, b) => a.scheduledAt!.compareTo(b.scheduledAt!));
           break;
         case 'past':
           result = list.where((a) {
             final d = a.scheduledAt;
-            return (d != null && d.isBefore(now)) ||
-                a.status.toLowerCase() == 'completed';
+            final status = a.status.toLowerCase();
+            return (status == 'completed' || status == 'no show') ||
+                (d != null && d.isBefore(now));
           }).toList();
           break;
         case 'cancelled':
@@ -750,6 +796,7 @@ class _AppointmentsListScreenState extends ConsumerState<AppointmentsListScreen>
                           emptyMessage: 'No upcoming appointments',
                           onRetryPayment: _retryPayment,
                           onDelete: _deleteAppointment,
+                          onCancel: _cancelAppointment,
                         ),
                         _AppointmentListView(
                           appointments: past,
@@ -758,6 +805,7 @@ class _AppointmentsListScreenState extends ConsumerState<AppointmentsListScreen>
                           emptyMessage: 'No past appointments',
                           onRetryPayment: _retryPayment,
                           onDelete: _deleteAppointment,
+                          onCancel: _cancelAppointment,
                         ),
                         _AppointmentListView(
                           appointments: cancelled,
@@ -766,6 +814,7 @@ class _AppointmentsListScreenState extends ConsumerState<AppointmentsListScreen>
                           emptyMessage: 'No cancelled appointments',
                           onRetryPayment: _retryPayment,
                           onDelete: _deleteAppointment,
+                          onCancel: _cancelAppointment,
                         ),
                       ],
                     ),
@@ -784,12 +833,14 @@ class _AppointmentListView extends StatelessWidget {
     required this.emptyMessage,
     this.onRetryPayment,
     this.onDelete,
+    this.onCancel,
   });
   final List<Appointment> appointments;
   final Future<void> Function() onRefresh;
   final String emptyMessage;
   final Function(Appointment)? onRetryPayment;
   final Function(String)? onDelete;
+  final Function(Appointment)? onCancel;
 
   Future<void> _launchWhatsApp(
     BuildContext context,
@@ -1108,14 +1159,18 @@ class _AppointmentListView extends StatelessWidget {
                                     color: cs.onSurface.withValues(alpha: 0.4),
                                   ),
                                   const SizedBox(width: 4),
-                                  Text(
-                                    apt.phoneNumber.isNotEmpty
-                                        ? apt.phoneNumber
-                                        : 'No phone number',
-                                    style: GoogleFonts.poppins(
-                                      fontSize: 10.5,
-                                      color:
-                                          cs.onSurface.withValues(alpha: 0.45),
+                                  Expanded(
+                                    child: Text(
+                                      apt.phoneNumber.isNotEmpty
+                                          ? apt.phoneNumber
+                                          : 'No phone number',
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 10.5,
+                                        color:
+                                            cs.onSurface.withValues(alpha: 0.45),
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                      maxLines: 1,
                                     ),
                                   ),
                                 ],
@@ -1226,6 +1281,18 @@ class _AppointmentListView extends StatelessWidget {
                                   constraints: const BoxConstraints(),
                                   padding: const EdgeInsets.all(4),
                                 ),
+                                if (apt.status.toLowerCase() != 'cancelled')
+                                  IconButton(
+                                    icon: Icon(
+                                      Icons.cancel_outlined,
+                                      size: 17,
+                                      color: cs.error.withValues(alpha: 0.7),
+                                    ),
+                                    onPressed: () => onCancel?.call(apt),
+                                    tooltip: 'Cancel Appointment',
+                                    constraints: const BoxConstraints(),
+                                    padding: const EdgeInsets.all(4),
+                                  ),
                               ],
                             ),
                           ],

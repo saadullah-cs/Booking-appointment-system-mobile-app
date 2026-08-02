@@ -804,6 +804,13 @@ class _AppointmentDetailScreenState
                   color: AppColors.statusCompleted,
                   onTap: () => _updateStatus('Completed'),
                 ),
+                const SizedBox(width: 10),
+                _QuickBtn(
+                  icon: Icons.cancel_outlined,
+                  label: 'Cancel',
+                  color: AppColors.statusCancelled,
+                  onTap: () => _updateStatus('Cancelled'),
+                ),
               ],
             ),
             const SizedBox(height: 10),

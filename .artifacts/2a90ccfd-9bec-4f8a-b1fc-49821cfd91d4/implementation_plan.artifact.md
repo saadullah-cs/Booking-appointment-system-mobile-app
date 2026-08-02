@@ -1,39 +1,53 @@
-# Implementation Plan - Fix Crashes, Auth Loops, and Security Lock
+# Implementation Plan - Booking Flow & Status Filtering Fixes
 
-This plan addresses the `BookingScreen` crash, the Firebase `invalid-credential` loop, and restores the PIN/Biometric lock functionality.
+This plan outlines the fixes for the appointment booking success flow, status filtering logic, and the addition of a cancellation feature.
 
 ## Proposed Changes
 
-### [Feature: Appointments]
+### [Core: Cleanup]
+
+#### [MODIFY] [dashboard_screen.dart](file:///D:/Android/Booking-appointment-system-mobile-app/lib/src/features/dashboard/dashboard_screen.dart)
+- Remove the 'Test Notif' button from the Quick Actions grid.
+
+#### [MODIFY] [notification_service.dart](file:///D:/Android/Booking-appointment-system-mobile-app/lib/src/services/notification_service.dart)
+- Remove the `testZonedNotification` method.
+
+### [Feature: Booking Success Flow]
 
 #### [MODIFY] [booking_screen.dart](file:///D:/Android/Booking-appointment-system-mobile-app/lib/src/features/appointments/booking_screen.dart)
-- Clean up `dispose()` method.
-- Remove redundant calls to `_emailController.dispose()`, `_nameController.dispose()`, `_phoneController.dispose()`, and `_professionController.dispose()`.
-- Ensure all controllers are disposed exactly once to prevent the "used after being disposed" crash.
+- In `_submitBooking`, after a successful save:
+    - Trigger a `SnackBar` with the message "Appointment booked successfully!".
+    - Navigate back to the 'Upcoming' tab in the Appointments view using `context.go('/appointments')`.
+    - Ensure this happens for both online and cash payment modes.
 
----
+### [Feature: Appointments Filtering]
 
-### [Feature: Auth & Routing]
+#### [MODIFY] [appointments_list_screen.dart](file:///D:/Android/Booking-appointment-system-mobile-app/lib/src/features/appointments/appointments_list_screen.dart)
+- Update `filterByType` logic to strictly follow these rules:
+    - **Upcoming**: `(status == 'Pending' || status == 'Confirmed') && scheduledAt.isAfter(now)`.
+    - **Past**: `(status == 'Completed' || status == 'No Show') || (scheduledAt != null && scheduledAt.isBefore(now))`.
+    - **Cancelled**: `status == 'Cancelled'`.
 
-#### [MODIFY] [app_router.dart](file:///D:/Android/Booking-appointment-system-mobile-app/lib/src/routes/app_router.dart)
-- Update the `/` route to point to `SplashEntryScreen` instead of `LoginScreen`.
-- This ensures that the app always starts with the splash screen logic which checks for existing sessions and security locks.
+### [Feature: Appointment Cancellation]
 
-#### [MODIFY] [splash_entry_screen.dart](file:///D:/Android/Booking-appointment-system-mobile-app/lib/src/features/auth/screens/splash_entry_screen.dart)
-- Enhance `invalid-credential` error handling.
-- When this error occurs, explicitly clear `local_auth_current_user` from `AppPreferences` and call `FirebaseAuth.instance.signOut()`.
-- Add a final fallback to `context.go('/login')` if any auth validation fails.
+#### [MODIFY] [appointment_detail_screen.dart](file:///D:/Android/Booking-appointment-system-mobile-app/lib/src/features/appointments/appointment_detail_screen.dart)
+- Add a prominent "Cancel Appointment" button in the quick action buttons area.
+- Ensure it calls `_updateStatus('Cancelled')`.
 
-#### [MODIFY] [app_shell_scaffold.dart](file:///D:/Android/Booking-appointment-system-mobile-app/lib/src/features/shared/widgets/app_shell_scaffold.dart)
-- Review the `didChangeAppLifecycleState` logic to ensure `security_unlocked` is reset to `false` when the app is paused.
-- Ensure `_checkPinLockOnResume()` is called reliably to trigger the `SecurityLockScreen`.
+#### [MODIFY] [appointments_list_screen.dart](file:///D:/Android/Booking-appointment-system-mobile-app/lib/src/features/appointments/appointments_list_screen.dart)
+- Add a "Cancel" `IconButton` to the appointment card for quick access.
+- Hook it up to a new `_cancelAppointment` method that updates the status to 'Cancelled'.
 
 ## Verification Plan
 
-### Automated Tests
-- N/A (Manual verification on physical device/emulator is preferred for lifecycle and auth loops).
-
 ### Manual Verification
-1. **Crash Fix**: Open `BookingScreen`, fill details, then exit the screen. Verify no crash occurs in the debug console during disposal.
-2. **Auth Loop**: Simulate an invalid credential state (e.g., by deleting the user in Firebase Console). Verify the app routes to the Login screen instead of spinning at the splash.
-3. **Security Lock**: Enable PIN lock in Settings. Close the app and restart. Verify `SecurityLockScreen` appears. Minimize the app and resume. Verify `SecurityLockScreen` appears.
+1. **Cleanup**: Verify the 'Test Notif' button is no longer on the Dashboard.
+2. **Booking Flow**: Book a new appointment. Verify the "Appointment booked successfully!" SnackBar appears and you are redirected to the Appointments screen.
+3. **Filtering**:
+    - Verify 'Pending' appointments for today/future appear in 'Upcoming'.
+    - Verify past appointments appear in 'Past'.
+    - Verify 'Completed'/'No Show' appear in 'Past'.
+    - Verify 'Cancelled' appear in 'Cancelled'.
+4. **Cancellation**:
+    - Cancel an appointment from the list or detail screen.
+    - Verify it immediately moves to the 'Cancelled' tab.
