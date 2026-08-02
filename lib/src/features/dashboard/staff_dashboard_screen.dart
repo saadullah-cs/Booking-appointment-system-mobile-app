@@ -426,81 +426,113 @@ class _StaffDashboardScreenState extends ConsumerState<StaffDashboardScreen>
                     ],
                   ),
                   const SizedBox(height: 20),
-                  SwitchListTile.adaptive(
-                    value: pinEnabled || storedPin.isNotEmpty,
-                    onChanged: (val) async {
-                      if (val) {
-                        final newPin = await _showStaffPinInputDialog(
-                          title: 'Create 4-Digit Staff PIN',
-                          description: 'Set a PIN code to lock Staff Portal.',
-                        );
-                        if (newPin == null || newPin.length < 4) return;
-                        await prefs.setBool('staff_pin_enabled_$staffEmail', true);
-                        await prefs.setString('staff_pin_code_$staffEmail', newPin);
-                        setModalState(() {
-                          pinEnabled = true;
-                          storedPin = newPin;
-                        });
-                        _showSnackBar('Staff PIN Lock enabled successfully! 🔒');
-                      } else {
-                        await prefs.setBool('staff_pin_enabled_$staffEmail', false);
-                        await prefs.setBool('staff_biometric_enabled_$staffEmail', false);
-                        await prefs.remove('staff_pin_code_$staffEmail');
-                        setModalState(() {
-                          pinEnabled = false;
-                          bioEnabled = false;
-                          storedPin = '';
-                        });
-                        _showSnackBar('Staff PIN Lock disabled.');
-                      }
-                    },
-                    title: Text(
-                      'PIN Lock Protection',
-                      style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14),
+                  Material(
+                    color: Colors.transparent,
+                    child: SwitchListTile.adaptive(
+                      value: pinEnabled || storedPin.isNotEmpty,
+                      onChanged: (val) async {
+                        if (val) {
+                          final newPin = await _showStaffPinInputDialog(
+                            title: 'Create 4-Digit Staff PIN',
+                            description: 'Set a PIN code to lock Staff Portal.',
+                          );
+                          if (newPin == null || newPin.length < 4) return;
+                          await prefs.setBool(
+                            'staff_pin_enabled_$staffEmail',
+                            true,
+                          );
+                          await prefs.setString(
+                            'staff_pin_code_$staffEmail',
+                            newPin,
+                          );
+                          setModalState(() {
+                            pinEnabled = true;
+                            storedPin = newPin;
+                          });
+                          _showSnackBar(
+                            'Staff PIN Lock enabled successfully! 🔒',
+                          );
+                        } else {
+                          await prefs.setBool(
+                            'staff_pin_enabled_$staffEmail',
+                            false,
+                          );
+                          await prefs.setBool(
+                            'staff_biometric_enabled_$staffEmail',
+                            false,
+                          );
+                          await prefs.remove('staff_pin_code_$staffEmail');
+                          setModalState(() {
+                            pinEnabled = false;
+                            bioEnabled = false;
+                            storedPin = '';
+                          });
+                          _showSnackBar('Staff PIN Lock disabled.');
+                        }
+                      },
+                      title: Text(
+                        'PIN Lock Protection',
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                      ),
+                      subtitle: Text(
+                        storedPin.isNotEmpty
+                            ? 'Active PIN: ****'
+                            : 'Require 4-digit PIN to open Staff Portal',
+                        style: GoogleFonts.poppins(fontSize: 12),
+                      ),
+                      secondary: Icon(Icons.pin_rounded, color: cs.primary),
                     ),
-                    subtitle: Text(
-                      storedPin.isNotEmpty
-                          ? 'Active PIN: ****'
-                          : 'Require 4-digit PIN to open Staff Portal',
-                      style: GoogleFonts.poppins(fontSize: 12),
-                    ),
-                    secondary: Icon(Icons.pin_rounded, color: cs.primary),
                   ),
                   const Divider(),
-                  SwitchListTile.adaptive(
-                    value: bioEnabled,
-                    onChanged: (pinEnabled || storedPin.isNotEmpty)
-                        ? (val) async {
-                            final localAuth = LocalAuthentication();
-                            final canCheck = await localAuth.canCheckBiometrics ||
-                                await localAuth.isDeviceSupported();
-                            if (val && !canCheck) {
-                              _showSnackBar(
-                                'Device does not support biometric authentication.',
-                                isError: true,
+                  Material(
+                    color: Colors.transparent,
+                    child: SwitchListTile.adaptive(
+                      value: bioEnabled,
+                      onChanged: (pinEnabled || storedPin.isNotEmpty)
+                          ? (val) async {
+                              final localAuth = LocalAuthentication();
+                              final canCheck =
+                                  await localAuth.canCheckBiometrics ||
+                                  await localAuth.isDeviceSupported();
+                              if (val && !canCheck) {
+                                _showSnackBar(
+                                  'Device does not support biometric authentication.',
+                                  isError: true,
+                                );
+                                return;
+                              }
+                              await prefs.setBool(
+                                'staff_biometric_enabled_$staffEmail',
+                                val,
                               );
-                              return;
+                              setModalState(() => bioEnabled = val);
+                              _showSnackBar(
+                                val
+                                    ? 'Staff Biometric fingerprint enabled. 🧬'
+                                    : 'Biometric authentication disabled.',
+                              );
                             }
-                            await prefs.setBool('staff_biometric_enabled_$staffEmail', val);
-                            setModalState(() => bioEnabled = val);
-                            _showSnackBar(
-                              val
-                                  ? 'Staff Biometric fingerprint enabled. 🧬'
-                                  : 'Biometric authentication disabled.',
-                            );
-                          }
-                        : null,
-                    title: Text(
-                      'Biometric Fingerprint Scan',
-                      style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14),
-                    ),
-                    subtitle: Text(
-                      'Unlock Staff Portal using fingerprint sensor',
-                      style: GoogleFonts.poppins(fontSize: 12),
-                    ),
-                    secondary: Icon(
-                      Icons.fingerprint_rounded,
-                      color: (pinEnabled || storedPin.isNotEmpty) ? cs.primary : Colors.grey,
+                          : null,
+                      title: Text(
+                        'Biometric Fingerprint Scan',
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                      ),
+                      subtitle: Text(
+                        'Unlock Staff Portal using fingerprint sensor',
+                        style: GoogleFonts.poppins(fontSize: 12),
+                      ),
+                      secondary: Icon(
+                        Icons.fingerprint_rounded,
+                        color: (pinEnabled || storedPin.isNotEmpty)
+                            ? cs.primary
+                            : Colors.grey,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 16),

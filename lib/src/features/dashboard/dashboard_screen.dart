@@ -37,22 +37,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       ref.read(appointmentRepositoryProvider);
   PaymentRepository get _paymentRepository =>
       ref.read(paymentRepositoryProvider);
-  List<Appointment> _appointments = [];
   List<Payment> _payments = [];
   bool _isLoading = false;
-
-  // NEW VARIABLES:
-  int _totalApts = 0;
-  int _confirmedApts = 0;
-  int _pendingApts = 0;
-  double _totalPaid = 0.0;
-  double _totalPending = 0.0;
-  double _totalAll = 0.0;
-  List<Appointment> _todayAppointments = [];
 
   Future<void> _exportMasterBackup() async {
     try {
       final prefs = await AppPreferences.instance.prefs;
+      if (!mounted) return;
 
       // Parse Appointments
       final appointmentsRaw =
@@ -413,37 +404,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       );
     }
 
-    // THE MATH ADDITION:
-    final todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
-
     if (!mounted) return;
     setState(() {
-      _appointments = appointments;
       _payments = payments;
-
-      _totalApts = appointments.length;
-      _confirmedApts = appointments
-          .where((a) => a.status.toLowerCase() == 'confirmed')
-          .length;
-      _pendingApts = appointments
-          .where((a) => a.status.toLowerCase() == 'pending')
-          .length;
-
-      // Compute revenue from Appointment model as requested
-      _totalPaid = appointments
-          .where((a) => a.paymentStatus.toLowerCase() == 'paid')
-          .fold<double>(0, (sum, a) => sum + a.amount);
-      _totalPending = appointments
-          .where((a) => a.paymentStatus.toLowerCase() == 'pending')
-          .fold<double>(0, (sum, a) => sum + a.amount);
-      _totalAll = appointments.fold<double>(0, (sum, a) => sum + a.amount);
-
-      _todayAppointments = appointments.where((a) {
-        if (a.scheduledAt == null) return false;
-        return DateFormat('yyyy-MM-dd').format(a.scheduledAt!.toLocal()) ==
-            todayStr;
-      }).toList()..sort((a, b) => a.scheduledAt!.compareTo(b.scheduledAt!));
-
       _isLoading = false;
     });
   }
@@ -452,18 +415,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     if (await canLaunchUrlString(url)) await launchUrlString(url);
   }
 
-  Appointment? get _nextAppointment {
-    final now = DateTime.now();
-    final upcoming = _appointments.where((a) {
-      final d = a.scheduledAt;
-      return d != null &&
-          d.isAfter(now) &&
-          a.status.toLowerCase() != 'cancelled';
-    }).toList()..sort((a, b) => a.scheduledAt!.compareTo(b.scheduledAt!));
-    return upcoming.isNotEmpty ? upcoming.first : null;
-  }
-
-  Widget _PaymentRemindersBanner(ColorScheme cs) {
+  Widget _buildPaymentRemindersBanner(ColorScheme cs) {
     final outstanding =
         _payments
             .where((p) => p.status != 'Paid' && p.reminderDate != null)
@@ -522,6 +474,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authStateProvider);
+    final appointments = ref.watch(appointmentsProvider);
     final user =
         authState.asData?.value ??
         AppUser(
@@ -532,11 +485,41 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         );
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    final isDark = theme.brightness == Brightness.dark;
     final isWide = MediaQuery.of(context).size.width > 720;
 
-    // DELETION
-    final next = _nextAppointment;
+    // Reactive calculations
+    final todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final totalApts = appointments.length;
+    final confirmedApts = appointments
+        .where((a) => a.status.toLowerCase() == 'confirmed')
+        .length;
+    final pendingApts = appointments
+        .where((a) => a.status.toLowerCase() == 'pending')
+        .length;
+
+    final totalPaid = appointments
+        .where((a) => a.paymentStatus.toLowerCase() == 'paid')
+        .fold<double>(0, (runningTotal, appointment) => runningTotal + appointment.amount);
+    final totalPending = appointments
+        .where((a) => a.paymentStatus.toLowerCase() == 'pending')
+        .fold<double>(0, (runningTotal, appointment) => runningTotal + appointment.amount);
+    final totalAll = appointments.fold<double>(0, (runningTotal, appointment) => runningTotal + appointment.amount);
+
+    final todayAppointments = appointments.where((a) {
+      if (a.scheduledAt == null) return false;
+      return DateFormat('yyyy-MM-dd').format(a.scheduledAt!.toLocal()) ==
+          todayStr;
+    }).toList()..sort((a, b) => a.scheduledAt!.compareTo(b.scheduledAt!));
+
+    final now = DateTime.now();
+    final upcomingList = appointments.where((a) {
+      final d = a.scheduledAt;
+      return d != null &&
+          d.isAfter(now) &&
+          a.status.toLowerCase() != 'cancelled' &&
+          a.status.toLowerCase() != 'completed';
+    }).toList()..sort((a, b) => a.scheduledAt!.compareTo(b.scheduledAt!));
+    final next = upcomingList.isNotEmpty ? upcomingList.first : null;
 
     return AppShellScaffold(
       title: 'Dashboard',
@@ -587,7 +570,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             displayName: user.displayName.split(' ').first,
                           ),
                           const SizedBox(height: 14),
-                          _PaymentRemindersBanner(cs),
+                          _buildPaymentRemindersBanner(cs),
                           if (next != null &&
                               next.scheduledAt != null &&
                               next.scheduledAt!
@@ -600,39 +583,37 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             _UpcomingNotificationBanner(appointment: next),
                             const SizedBox(height: 14),
                           ],
-                          if (!_isLoading) ...[
-                            Row(
-                              children: [
-                                _MiniStatCard(
-                                  label: 'Total',
-                                  value: _totalApts,
-                                  icon: Icons.event_note_rounded,
-                                  color: cs.primary,
-                                ),
-                                _MiniStatCard(
-                                  label: 'Confirmed',
-                                  value: _confirmedApts,
-                                  icon: Icons.check_circle_outline_rounded,
-                                  color: AppColors.statusConfirmed,
-                                ),
-                                _MiniStatCard(
-                                  label: 'Pending',
-                                  value: _pendingApts,
-                                  icon: Icons.hourglass_top_rounded,
-                                  color: AppColors.statusPending,
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 14),
-                            _PaymentsQuickViewCard(
-                              total: _totalAll,
-                              collected: _totalPaid,
-                              pending: _totalPending,
-                            ),
-                          ],
+                          Row(
+                            children: [
+                              _MiniStatCard(
+                                label: 'Total',
+                                value: totalApts,
+                                icon: Icons.event_note_rounded,
+                                color: cs.primary,
+                              ),
+                              _MiniStatCard(
+                                label: 'Confirmed',
+                                value: confirmedApts,
+                                icon: Icons.check_circle_outline_rounded,
+                                color: AppColors.statusConfirmed,
+                              ),
+                              _MiniStatCard(
+                                label: 'Pending',
+                                value: pendingApts,
+                                icon: Icons.hourglass_top_rounded,
+                                color: AppColors.statusPending,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 14),
+                          _PaymentsQuickViewCard(
+                            total: totalAll,
+                            collected: totalPaid,
+                            pending: totalPending,
+                          ),
                           const SizedBox(height: 18),
                           _TodayScheduleTimeline(
-                            appointments: _todayAppointments,
+                            appointments: todayAppointments,
                             onRefresh: _loadAppointments,
                           ),
                           const SizedBox(height: 18),
@@ -670,7 +651,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                 child: _SkeletonCard(),
                               ),
                             )
-                          else if (_appointments.isEmpty)
+                          else if (appointments.isEmpty)
                             PremiumCard(
                               padding: const EdgeInsets.all(20),
                               child: Row(
@@ -710,7 +691,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                               ),
                             )
                           else
-                            ..._appointments
+                            ...appointments
                                 .take(5)
                                 .map(
                                   (apt) => Padding(
@@ -751,7 +732,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       displayName: user.displayName.split(' ').first,
                     ),
                     const SizedBox(height: 14),
-                    _PaymentRemindersBanner(cs),
+                    _buildPaymentRemindersBanner(cs),
                     if (next != null &&
                         next.scheduledAt != null &&
                         next.scheduledAt!.difference(DateTime.now()).inHours <
@@ -762,39 +743,37 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       _UpcomingNotificationBanner(appointment: next),
                       const SizedBox(height: 14),
                     ],
-                    if (!_isLoading) ...[
-                      Row(
-                        children: [
-                          _MiniStatCard(
-                            label: 'Total',
-                            value: _totalApts,
-                            icon: Icons.event_note_rounded,
-                            color: cs.primary,
-                          ),
-                          _MiniStatCard(
-                            label: 'Confirmed',
-                            value: _confirmedApts,
-                            icon: Icons.check_circle_outline_rounded,
-                            color: AppColors.statusConfirmed,
-                          ),
-                          _MiniStatCard(
-                            label: 'Pending',
-                            value: _pendingApts,
-                            icon: Icons.hourglass_top_rounded,
-                            color: AppColors.statusPending,
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 14),
-                      _PaymentsQuickViewCard(
-                        total: _totalAll,
-                        collected: _totalPaid,
-                        pending: _totalPending,
-                      ),
-                    ],
+                    Row(
+                      children: [
+                        _MiniStatCard(
+                          label: 'Total',
+                          value: totalApts,
+                          icon: Icons.event_note_rounded,
+                          color: cs.primary,
+                        ),
+                        _MiniStatCard(
+                          label: 'Confirmed',
+                          value: confirmedApts,
+                          icon: Icons.check_circle_outline_rounded,
+                          color: AppColors.statusConfirmed,
+                        ),
+                        _MiniStatCard(
+                          label: 'Pending',
+                          value: pendingApts,
+                          icon: Icons.hourglass_top_rounded,
+                          color: AppColors.statusPending,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    _PaymentsQuickViewCard(
+                      total: totalAll,
+                      collected: totalPaid,
+                      pending: totalPending,
+                    ),
                     const SizedBox(height: 18),
                     _TodayScheduleTimeline(
-                      appointments: _todayAppointments,
+                      appointments: todayAppointments,
                       onRefresh: _loadAppointments,
                     ),
                     const SizedBox(height: 18),
@@ -832,7 +811,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           child: _SkeletonCard(),
                         ),
                       )
-                    else if (_appointments.isEmpty)
+                    else if (appointments.isEmpty)
                       PremiumCard(
                         padding: const EdgeInsets.all(20),
                         child: Row(
@@ -871,7 +850,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         ),
                       )
                     else
-                      ..._appointments
+                      ...appointments
                           .take(5)
                           .map(
                             (apt) => Padding(
@@ -879,6 +858,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                               child: _AppointmentTile(
                                 appointment: apt,
                                 onDeleted: _loadAppointments,
+                                onRetryPayment: () => _retryPayment(apt),
                               ),
                             ),
                           ),
@@ -1282,6 +1262,12 @@ class _QuickActionsGrid extends StatelessWidget {
           color: const Color(0xFF0F7490),
           onTap: () => context.push('/staff-management'),
         ),
+        _QuickAction(
+          icon: Icons.science_rounded,
+          label: 'Test Notif',
+          color: Colors.purpleAccent,
+          onTap: () => NotificationService().testZonedNotification(20),
+        ),
       ],
     );
   }
@@ -1672,7 +1658,6 @@ class _UpcomingNotificationBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     final diff = appointment.scheduledAt!.difference(DateTime.now());
     final hours = diff.inHours;
     final minutes = diff.inMinutes % 60;
@@ -1911,6 +1896,7 @@ class _TodayScheduleTimeline extends StatelessWidget {
       if (await canLaunchUrlString(url)) {
         await launchUrlString(url, mode: LaunchMode.externalApplication);
       } else {
+        if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
@@ -1930,6 +1916,7 @@ class _TodayScheduleTimeline extends StatelessWidget {
       if (await canLaunchUrlString(url)) {
         await launchUrlString(url);
       } else {
+        if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Could not launch dialer.')),
         );
@@ -2117,7 +2104,9 @@ class _TodayScheduleTimeline extends StatelessWidget {
                                               vertical: 2,
                                             ),
                                             decoration: BoxDecoration(
-                                              color: sColor.withValues(alpha: 0.12),
+                                              color: sColor.withValues(
+                                                alpha: 0.12,
+                                              ),
                                               borderRadius:
                                                   BorderRadius.circular(6),
                                             ),
@@ -2176,7 +2165,9 @@ class _TodayScheduleTimeline extends StatelessWidget {
                                         apt.treatmentType,
                                         style: GoogleFonts.poppins(
                                           fontSize: 11,
-                                          color: cs.onSurface.withValues(alpha: 0.55),
+                                          color: cs.onSurface.withValues(
+                                            alpha: 0.55,
+                                          ),
                                         ),
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
@@ -2232,7 +2223,9 @@ class _TodayScheduleTimeline extends StatelessWidget {
                                     ],
                                     Icon(
                                       Icons.chevron_right_rounded,
-                                      color: cs.onSurface.withValues(alpha: 0.2),
+                                      color: cs.onSurface.withValues(
+                                        alpha: 0.2,
+                                      ),
                                     ),
                                   ],
                                 ),

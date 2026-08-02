@@ -1,17 +1,18 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../../models/appointment.dart';
-import '../../../services/app_preferences.dart';
-import '../../../theme/app_theme.dart';
-
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+
+import '../../../models/appointment.dart';
+import '../../../services/app_preferences.dart';
+import '../../../services/repository_providers.dart';
+import '../../../theme/app_theme.dart';
 import '../../auth/screens/security_lock_screen.dart';
 
-class AppShellScaffold extends StatefulWidget {
+class AppShellScaffold extends ConsumerStatefulWidget {
   const AppShellScaffold({
     super.key,
     required this.title,
@@ -32,10 +33,10 @@ class AppShellScaffold extends StatefulWidget {
   final Widget? bottomNavigationBar;
 
   @override
-  State<AppShellScaffold> createState() => _AppShellScaffoldState();
+  ConsumerState<AppShellScaffold> createState() => _AppShellScaffoldState();
 }
 
-class _AppShellScaffoldState extends State<AppShellScaffold>
+class _AppShellScaffoldState extends ConsumerState<AppShellScaffold>
     with WidgetsBindingObserver {
   static const _navRoutes = [
     '/dashboard',
@@ -44,12 +45,9 @@ class _AppShellScaffoldState extends State<AppShellScaffold>
     '/notes',
     '/profile',
   ];
-  static const Duration _appointmentsCacheTtl = Duration(seconds: 30);
-  int _upcomingCount = 0;
-  List<Appointment>? _cachedAppointments;
-  DateTime? _cachedAppointmentsAt;
-  static bool _isLockScreenShowing = false;
 
+  // State variables
+  static bool _isLockScreenShowing = false;
   static final List<String> _routeHistory = [];
   static DateTime? _lastBackClickTime;
 
@@ -63,7 +61,8 @@ class _AppShellScaffoldState extends State<AppShellScaffold>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _checkUpcomingAppointments();
+
+    // Add to history
     if (widget.currentRoute != null &&
         (_routeHistory.isEmpty || _routeHistory.last != widget.currentRoute)) {
       _routeHistory.add(widget.currentRoute!);
@@ -93,7 +92,6 @@ class _AppShellScaffoldState extends State<AppShellScaffold>
   Future<void> _checkPinLockOnResume() async {
     if (_isLockScreenShowing) return;
 
-    // Verify user session on resume
     try {
       if (Firebase.apps.isNotEmpty &&
           FirebaseAuth.instance.currentUser != null) {
@@ -141,64 +139,18 @@ class _AppShellScaffoldState extends State<AppShellScaffold>
   }) {
     return appointments.where((a) {
       final d = a.scheduledAt;
-      return d != null &&
-          d.isAfter(now) &&
-          d.difference(now).inHours < 24 &&
-          a.status.toLowerCase() != 'cancelled';
+      final status = a.status.toLowerCase();
+      // Logic Fix: Exclude completed, cancelled, and no-show from top notifications
+      if (status == 'completed' ||
+          status == 'cancelled' ||
+          status == 'no show') {
+        return false;
+      }
+      return d != null && d.isAfter(now) && d.difference(now).inHours < 24;
     }).toList();
   }
 
-  Future<List<Appointment>> _loadAppointmentsFromPrefs() async {
-    final now = DateTime.now();
-    if (_cachedAppointments != null && _cachedAppointmentsAt != null) {
-      final age = now.difference(_cachedAppointmentsAt!);
-      if (age < _appointmentsCacheTtl) {
-        return _filterUpcomingAppointments(_cachedAppointments!, now: now);
-      }
-    }
-
-    try {
-      final prefs = await AppPreferences.instance.prefs;
-      final appointmentsRaw =
-          prefs.getString('clinic_booked_appointments') ?? '[]';
-      final List<dynamic> aptJson = jsonDecode(appointmentsRaw);
-      final appointments = aptJson
-          .map((e) => Appointment.fromJson(Map<String, dynamic>.from(e as Map)))
-          .toList();
-
-      if (mounted) {
-        setState(() {
-          _cachedAppointments = appointments;
-          _cachedAppointmentsAt = now;
-        });
-      }
-
-      return _filterUpcomingAppointments(appointments, now: now);
-    } catch (_) {
-      return [];
-    }
-  }
-
-  Future<void> _checkUpcomingAppointments() async {
-    try {
-      final appointments = await _loadAppointmentsFromPrefs();
-
-      if (mounted) {
-        setState(() {
-          _upcomingCount = appointments.length;
-        });
-      }
-    } catch (_) {}
-  }
-
-  Future<List<Appointment>> _loadUpcomingAppointmentsList() async {
-    final appointments = await _loadAppointmentsFromPrefs();
-    final upcoming = List<Appointment>.from(appointments);
-    upcoming.sort((a, b) => a.scheduledAt!.compareTo(b.scheduledAt!));
-    return upcoming;
-  }
-
-  void _showNotificationsSheet(BuildContext context) {
+  void _showNotificationsSheet(BuildContext context, List<Appointment> list) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -209,157 +161,145 @@ class _AppShellScaffoldState extends State<AppShellScaffold>
             borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-          child: FutureBuilder<List<Appointment>>(
-            future: _loadUpcomingAppointmentsList(),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const SizedBox(
-                  height: 200,
-                  child: Center(child: CircularProgressIndicator()),
-                );
-              }
-              final list = snapshot.data ?? [];
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
                 children: [
-                  Row(
-                    children: [
-                      Text(
-                        'Notifications',
-                        style: GoogleFonts.poppins(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      if (list.isNotEmpty)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.redAccent,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Text(
-                            '${list.length} new',
-                            style: GoogleFonts.poppins(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      const Spacer(),
-                      IconButton(
-                        icon: const Icon(Icons.close_rounded),
-                        onPressed: () => Navigator.pop(context),
-                      ),
-                    ],
+                  Text(
+                    'Notifications',
+                    style: GoogleFonts.poppins(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
-                  const SizedBox(height: 12),
-                  if (list.isEmpty)
-                    SizedBox(
-                      height: 150,
-                      child: Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.notifications_none_rounded,
-                              size: 40,
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.onSurface.withValues(alpha: 0.3),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'No upcoming appointments in the next 24 hours.',
-                              style: GoogleFonts.poppins(
-                                fontSize: 13,
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.onSurface.withValues(alpha: 0.5),
-                              ),
-                            ),
-                          ],
-                        ),
+                  const SizedBox(width: 8),
+                  if (list.isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
                       ),
-                    )
-                  else
-                    Flexible(
-                      child: ListView.separated(
-                        shrinkWrap: true,
-                        itemCount: list.length,
-                        separatorBuilder: (_, _) => const Divider(height: 16),
-                        itemBuilder: (context, index) {
-                          final apt = list[index];
-                          final diff = apt.scheduledAt!.difference(
-                            DateTime.now(),
-                          );
-                          final hours = diff.inHours;
-                          final minutes = diff.inMinutes % 60;
-                          final timeStr = hours > 0
-                              ? '$hours hr $minutes min'
-                              : '$minutes min';
-
-                          return ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            leading: Container(
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(
-                                color: Colors.orange.withValues(alpha: 0.1),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.notifications_active_rounded,
-                                color: Colors.orange,
-                              ),
-                            ),
-                            title: Text(
-                              apt.patientName,
-                              style: GoogleFonts.poppins(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 14,
-                              ),
-                            ),
-                            subtitle: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '${apt.treatmentType}  •  ${apt.time}',
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 12,
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSurface
-                                        .withValues(alpha: 0.6),
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  'Upcoming in $timeStr',
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 11,
-                                    color: Colors.orange,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            onTap: () {
-                              Navigator.pop(context);
-                              context.push('/appointment/${apt.id}');
-                            },
-                          );
-                        },
+                      decoration: BoxDecoration(
+                        color: Colors.redAccent,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        '${list.length} new',
+                        style: GoogleFonts.poppins(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
                       ),
                     ),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded),
+                    onPressed: () => Navigator.pop(context),
+                  ),
                 ],
-              );
-            },
+              ),
+              const SizedBox(height: 12),
+              if (list.isEmpty)
+                SizedBox(
+                  height: 150,
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.notifications_none_rounded,
+                          size: 40,
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onSurface.withValues(alpha: 0.3),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'No upcoming appointments in the next 24 hours.',
+                          style: GoogleFonts.poppins(
+                            fontSize: 13,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withValues(alpha: 0.5),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              else
+                Flexible(
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: list.length,
+                    separatorBuilder: (_, __) => const Divider(height: 16),
+                    itemBuilder: (context, index) {
+                      final apt = list[index];
+                      final diff = apt.scheduledAt!.difference(DateTime.now());
+                      final hours = diff.inHours;
+                      final minutes = diff.inMinutes % 60;
+                      final timeStr = hours > 0
+                          ? '$hours hr $minutes min'
+                          : '$minutes min';
+
+                      return Material(
+                        color: Colors.transparent,
+                        child: ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.withValues(alpha: 0.1),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.notifications_active_rounded,
+                              color: Colors.orange,
+                            ),
+                          ),
+                          title: Text(
+                            apt.patientName,
+                            style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                            ),
+                          ),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '${apt.treatmentType}  •  ${apt.time}',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 12,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurface.withValues(alpha: 0.6),
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'Upcoming in $timeStr',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 11,
+                                  color: Colors.orange,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                          onTap: () {
+                            Navigator.pop(context);
+                            context.push('/appointment/${apt.id}');
+                          },
+                        ),
+                      );
+                    },
+                  ),
+                ),
+            ],
           ),
         );
       },
@@ -373,22 +313,27 @@ class _AppShellScaffoldState extends State<AppShellScaffold>
     final isWide = MediaQuery.of(context).size.width > 850;
     final showPermanentDrawer = isWide && widget.useDrawer;
 
+    // Riverpod synchronization for notifications
+    final appointments = ref.watch(appointmentsProvider);
+    final now = DateTime.now();
+    final upcoming = _filterUpcomingAppointments(appointments, now: now);
+    final upcomingCount = upcoming.length;
+
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
         if (didPop) return;
 
-        // 1. If we can pop (sub-screen pushed onto navigator), pop normally
         if (canPop) {
           context.pop();
           return;
         }
 
-        final now = DateTime.now();
+        final nowTime = DateTime.now();
 
-        // 2. Double click back (within 1.5 seconds) -> direct to Home Dashboard
         if (_lastBackClickTime != null &&
-            now.difference(_lastBackClickTime!) < const Duration(milliseconds: 1500)) {
+            nowTime.difference(_lastBackClickTime!) <
+                const Duration(milliseconds: 1500)) {
           _lastBackClickTime = null;
           if (widget.currentRoute != '/dashboard') {
             context.go('/dashboard');
@@ -396,11 +341,10 @@ class _AppShellScaffoldState extends State<AppShellScaffold>
           }
         }
 
-        _lastBackClickTime = now;
+        _lastBackClickTime = nowTime;
 
-        // 3. Single click back: navigate to last visited page in history if available
         if (_routeHistory.length > 1) {
-          _routeHistory.removeLast(); // remove current route
+          _routeHistory.removeLast();
           final previousRoute = _routeHistory.last;
           if (previousRoute != widget.currentRoute) {
             context.go(previousRoute);
@@ -408,13 +352,11 @@ class _AppShellScaffoldState extends State<AppShellScaffold>
           }
         }
 
-        // 4. Fallback if not on Dashboard
         if (widget.currentRoute != '/dashboard') {
           context.go('/dashboard');
           return;
         }
 
-        // 5. If we are on Dashboard, show Exit Confirmation
         final shouldExit = await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
@@ -444,7 +386,6 @@ class _AppShellScaffoldState extends State<AppShellScaffold>
         );
 
         if (shouldExit == true) {
-          // Trigger system exit
           SystemNavigator.pop();
         }
       },
@@ -497,10 +438,10 @@ class _AppShellScaffoldState extends State<AppShellScaffold>
               children: [
                 IconButton(
                   icon: const Icon(Icons.notifications_outlined),
-                  onPressed: () => _showNotificationsSheet(context),
+                  onPressed: () => _showNotificationsSheet(context, upcoming),
                   tooltip: 'Notifications',
                 ),
-                if (_upcomingCount > 0)
+                if (upcomingCount > 0)
                   Positioned(
                     top: 10,
                     right: 10,
@@ -681,7 +622,7 @@ class _AppDrawer extends StatelessWidget {
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.symmetric(horizontal: 12),
-              itemCount: 11, // Number of items
+              itemCount: 11,
               itemBuilder: (context, index) {
                 switch (index) {
                   case 0:

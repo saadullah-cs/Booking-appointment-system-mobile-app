@@ -358,26 +358,27 @@ class _AppointmentDetailScreenState
       posturalPhotoPath: _posturalPhotoPath ?? '',
       paymentMethod: _paymentMethod,
       paymentStatus: _paymentStatus,
-      amount: double.tryParse(_amountController.text.trim()) ?? _appointment!.amount,
+      amount:
+          double.tryParse(_amountController.text.trim()) ??
+          _appointment!.amount,
       updatedAt: DateTime.now(),
     );
-    await _repo.updateAppointment(updated);
+
+    // Update via provider for real-time sync
+    await ref.read(appointmentsProvider.notifier).update(updated);
 
     // Manage scheduled reminder notifications
     try {
-      // Cancel previous scheduled notifications if date/time changed or no longer active
-      if (updated.scheduledAt != _appointment!.scheduledAt ||
-          updated.status.toLowerCase() != 'confirmed') {
-        await NotificationService().cancelNotification(
-          NotificationService.getReminderId(_appointment!.id),
-        );
-        await NotificationService().cancelNotification(
-          NotificationService.getStartId(_appointment!.id),
-        );
+      final statusLower = updated.status.toLowerCase();
+      // Logic Fix: Cancel notifications if status changed to completed/cancelled
+      if (statusLower == 'completed' ||
+          statusLower == 'cancelled' ||
+          statusLower == 'no show') {
+        await NotificationService().cancelAppointmentNotifications(updated.id);
+      } else {
+        // Re-schedule reminder and appointment time notifications for confirmed/pending
+        await NotificationService().scheduleAppointmentReminders(updated);
       }
-
-      // Re-schedule reminder and appointment time notifications
-      await NotificationService().scheduleAppointmentReminders(updated);
 
       // Show instant confirmation notification
       await NotificationService().showLocalNotification(
@@ -420,19 +421,17 @@ class _AppointmentDetailScreenState
       status: newStatus,
       updatedAt: DateTime.now(),
     );
-    await _repo.updateAppointment(updated);
+
+    // Update via provider for real-time sync
+    await ref.read(appointmentsProvider.notifier).update(updated);
 
     try {
-      // Cancel scheduled notifications if status is cancelled/completed/no show
-      if (newStatus.toLowerCase() == 'cancelled' ||
-          newStatus.toLowerCase() == 'completed' ||
-          newStatus.toLowerCase() == 'no show') {
-        await NotificationService().cancelNotification(
-          NotificationService.getReminderId(updated.id),
-        );
-        await NotificationService().cancelNotification(
-          NotificationService.getStartId(updated.id),
-        );
+      final statusLower = newStatus.toLowerCase();
+      // Logic Fix: Cancel scheduled notifications if status is cancelled/completed/no show
+      if (statusLower == 'cancelled' ||
+          statusLower == 'completed' ||
+          statusLower == 'no show') {
+        await NotificationService().cancelAppointmentNotifications(updated.id);
       } else {
         // Reschedule notifications if changed back to Confirmed/Pending
         await NotificationService().scheduleAppointmentReminders(updated);
@@ -448,8 +447,7 @@ class _AppointmentDetailScreenState
       debugPrint('Notification update failed: $e');
     }
 
-    if (!mounted) return;
-    setState(() => _appointment = updated);
+    if (mounted) setState(() => _appointment = updated);
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text('Status → $newStatus')));
@@ -1249,14 +1247,14 @@ class _AppointmentDetailScreenState
           value: apt.paymentMethod == 'online'
               ? 'Online Payment (Safepay/PayFast)'
               : apt.paymentMethod == 'card'
-                  ? 'Credit / Debit Card'
-                  : apt.paymentMethod == 'bank_transfer'
-                      ? 'Bank Transfer'
-                      : apt.paymentMethod == 'jazzcash'
-                          ? 'JazzCash'
-                          : apt.paymentMethod == 'easypaisa'
-                              ? 'EasyPaisa'
-                              : 'Pay at Clinic (Cash)',
+              ? 'Credit / Debit Card'
+              : apt.paymentMethod == 'bank_transfer'
+              ? 'Bank Transfer'
+              : apt.paymentMethod == 'jazzcash'
+              ? 'JazzCash'
+              : apt.paymentMethod == 'easypaisa'
+              ? 'EasyPaisa'
+              : 'Pay at Clinic (Cash)',
         ),
         _DetailRow(
           icon: Icons.monetization_on_outlined,
@@ -1518,14 +1516,8 @@ class _AppointmentDetailScreenState
                 value: 'bank_transfer',
                 child: Text('Bank Transfer'),
               ),
-              DropdownMenuItem(
-                value: 'jazzcash',
-                child: Text('JazzCash'),
-              ),
-              DropdownMenuItem(
-                value: 'easypaisa',
-                child: Text('EasyPaisa'),
-              ),
+              DropdownMenuItem(value: 'jazzcash', child: Text('JazzCash')),
+              DropdownMenuItem(value: 'easypaisa', child: Text('EasyPaisa')),
             ],
             onChanged: (val) {
               if (val != null) {
@@ -1546,10 +1538,7 @@ class _AppointmentDetailScreenState
                 value: 'pending',
                 child: Text('UNPAID / Pending'),
               ),
-              DropdownMenuItem(
-                value: 'paid',
-                child: Text('PAID ✓'),
-              ),
+              DropdownMenuItem(value: 'paid', child: Text('PAID ✓')),
             ],
             onChanged: (val) {
               if (val != null) {
@@ -2172,7 +2161,7 @@ class _DetailRow extends StatelessWidget {
               ),
             ),
           ),
-          ?trailing,
+          if (trailing != null) trailing!,
         ],
       ),
     );

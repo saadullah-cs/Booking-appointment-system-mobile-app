@@ -837,124 +837,126 @@ class _PatientProfileScreenState extends ConsumerState<PatientProfileScreen> {
           const SizedBox(height: 10),
           PremiumCard(
             padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Column(
-              children: [
-                SwitchListTile.adaptive(
-                  value: themeMode == ThemeMode.dark,
-                  onChanged: (_) =>
-                      ref.read(themeModeProvider.notifier).toggleTheme(),
-                  title: Text(
-                    'Night Mode',
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
+            child: Material(
+              color: Colors.transparent,
+              child: Column(
+                children: [
+                  SwitchListTile.adaptive(
+                    value: themeMode == ThemeMode.dark,
+                    onChanged: (_) =>
+                        ref.read(themeModeProvider.notifier).toggleTheme(),
+                    title: Text(
+                      'Night Mode',
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
+                    ),
+                    subtitle: Text(
+                      'Switch between light and dark themes',
+                      style: GoogleFonts.poppins(fontSize: 12),
+                    ),
+                    secondary: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: cs.primary.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(
+                        themeMode == ThemeMode.dark
+                            ? Icons.dark_mode_rounded
+                            : Icons.light_mode_rounded,
+                        color: cs.primary,
+                        size: 20,
+                      ),
                     ),
                   ),
-                  subtitle: Text(
-                    'Switch between light and dark themes',
-                    style: GoogleFonts.poppins(fontSize: 12),
-                  ),
-                  secondary: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: cs.primary.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(10),
+                  const Divider(height: 1, indent: 16, endIndent: 16),
+                  ListTile(
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: cs.primary.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(
+                        Icons.security_rounded,
+                        color: cs.primary,
+                        size: 20,
+                      ),
                     ),
-                    child: Icon(
-                      themeMode == ThemeMode.dark
-                          ? Icons.dark_mode_rounded
-                          : Icons.light_mode_rounded,
-                      color: cs.primary,
-                      size: 20,
+                    title: Text(
+                      'Security & Lock',
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
                     ),
-                  ),
-                ),
-
-                const Divider(height: 1, indent: 16, endIndent: 16),
-                ListTile(
-                  leading: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: cs.primary.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(10),
+                    subtitle: Text(
+                      'Configure PIN and fingerprint security',
+                      style: GoogleFonts.poppins(fontSize: 12),
                     ),
-                    child: Icon(
-                      Icons.security_rounded,
-                      color: cs.primary,
-                      size: 20,
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => context.push('/security-settings'),
+                  ),
+                  const Divider(height: 1, indent: 16, endIndent: 16),
+                  ListTile(
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(
+                        Icons.badge_rounded,
+                        color: AppColors.primary,
+                        size: 20,
+                      ),
                     ),
-                  ),
-                  title: Text(
-                    'Security & Lock',
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
+                    title: Text(
+                      'Staff Portal Access',
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
                     ),
-                  ),
-                  subtitle: Text(
-                    'Configure PIN and fingerprint security',
-                    style: GoogleFonts.poppins(fontSize: 12),
-                  ),
-                  trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () => context.push('/security-settings'),
-                ),
-                const Divider(height: 1, indent: 16, endIndent: 16),
-                ListTile(
-                  leading: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(10),
+                    subtitle: Text(
+                      'Manage staff credentials and access controls',
+                      style: GoogleFonts.poppins(fontSize: 12),
                     ),
-                    child: const Icon(
-                      Icons.badge_rounded,
-                      color: AppColors.primary,
-                      size: 20,
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => context.push('/staff-management'),
+                  ),
+                  const Divider(height: 1, indent: 16, endIndent: 16),
+                  ListTile(
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(
+                        Icons.manage_history_rounded,
+                        color: Colors.amber,
+                        size: 20,
+                      ),
                     ),
-                  ),
-                  title: Text(
-                    'Staff Portal Access',
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
+                    title: Text(
+                      'Staff Activity Audit Logs',
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
                     ),
-                  ),
-                  subtitle: Text(
-                    'Manage staff credentials and access controls',
-                    style: GoogleFonts.poppins(fontSize: 12),
-                  ),
-                  trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () => context.push('/staff-management'),
-                ),
-                const Divider(height: 1, indent: 16, endIndent: 16),
-                ListTile(
-                  leading: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.amber.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(10),
+                    subtitle: Text(
+                      'Doctor-only view of staff logins, activity & sessions',
+                      style: GoogleFonts.poppins(fontSize: 12),
                     ),
-                    child: const Icon(
-                      Icons.manage_history_rounded,
-                      color: Colors.amber,
-                      size: 20,
-                    ),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => context.push('/staff-management'),
                   ),
-                  title: Text(
-                    'Staff Activity Audit Logs',
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
-                    ),
-                  ),
-                  subtitle: Text(
-                    'Doctor-only view of staff logins, activity & sessions',
-                    style: GoogleFonts.poppins(fontSize: 12),
-                  ),
-                  trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () => context.push('/staff-management'),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
           const SizedBox(height: 18),

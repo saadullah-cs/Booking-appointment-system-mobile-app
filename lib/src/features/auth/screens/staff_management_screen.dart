@@ -364,33 +364,36 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen> {
           const SizedBox(height: 10),
           PremiumCard(
             padding: const EdgeInsets.symmetric(vertical: 8),
-            child: SwitchListTile.adaptive(
-              value: _allowStaffView,
-              onChanged: _toggleAccess,
-              title: Text(
-                'Allow Staff to View Bookings',
-                style: GoogleFonts.poppins(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 14,
+            child: Material(
+              color: Colors.transparent,
+              child: SwitchListTile.adaptive(
+                value: _allowStaffView,
+                onChanged: _toggleAccess,
+                title: Text(
+                  'Allow Staff to View Bookings',
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
                 ),
-              ),
-              subtitle: Text(
-                'Enable or disable appointment listing on the Staff App.',
-                style: GoogleFonts.poppins(fontSize: 12),
-              ),
-              secondary: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: (_allowStaffView ? cs.primary : Colors.grey)
-                      .withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(10),
+                subtitle: Text(
+                  'Enable or disable appointment listing on the Staff App.',
+                  style: GoogleFonts.poppins(fontSize: 12),
                 ),
-                child: Icon(
-                  _allowStaffView
-                      ? Icons.visibility_rounded
-                      : Icons.visibility_off_rounded,
-                  color: _allowStaffView ? cs.primary : Colors.grey,
-                  size: 20,
+                secondary: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: (_allowStaffView ? cs.primary : Colors.grey)
+                        .withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    _allowStaffView
+                        ? Icons.visibility_rounded
+                        : Icons.visibility_off_rounded,
+                    color: _allowStaffView ? cs.primary : Colors.grey,
+                    size: 20,
+                  ),
                 ),
               ),
             ),
@@ -398,33 +401,38 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen> {
           const SizedBox(height: 10),
           PremiumCard(
             padding: const EdgeInsets.symmetric(vertical: 8),
-            child: SwitchListTile.adaptive(
-              value: _allowStaffPaymentQuickView,
-              onChanged: _togglePaymentQuickViewAccess,
-              title: Text(
-                'Show Payment Quick View to Staff',
-                style: GoogleFonts.poppins(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 14,
+            child: Material(
+              color: Colors.transparent,
+              child: SwitchListTile.adaptive(
+                value: _allowStaffPaymentQuickView,
+                onChanged: _togglePaymentQuickViewAccess,
+                title: Text(
+                  'Show Payment Quick View to Staff',
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
                 ),
-              ),
-              subtitle: Text(
-                'Enable or disable revenue & payment metrics on Staff Dashboard.',
-                style: GoogleFonts.poppins(fontSize: 12),
-              ),
-              secondary: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: (_allowStaffPaymentQuickView ? cs.primary : Colors.grey)
-                      .withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(10),
+                subtitle: Text(
+                  'Enable or disable revenue & payment metrics on Staff Dashboard.',
+                  style: GoogleFonts.poppins(fontSize: 12),
                 ),
-                child: Icon(
-                  _allowStaffPaymentQuickView
-                      ? Icons.payments_rounded
-                      : Icons.payments_outlined,
-                  color: _allowStaffPaymentQuickView ? cs.primary : Colors.grey,
-                  size: 20,
+                secondary: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color:
+                        (_allowStaffPaymentQuickView ? cs.primary : Colors.grey)
+                            .withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    _allowStaffPaymentQuickView
+                        ? Icons.payments_rounded
+                        : Icons.payments_outlined,
+                    color:
+                        _allowStaffPaymentQuickView ? cs.primary : Colors.grey,
+                    size: 20,
+                  ),
                 ),
               ),
             ),
@@ -506,56 +514,59 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen> {
                 itemBuilder: (ctx, index) {
                   final staff = _staffList[index];
                   final email = staff['email'] ?? '';
-                  return ListTile(
-                    leading: CircleAvatar(
-                      backgroundColor: cs.primary.withValues(alpha: 0.1),
-                      child: Icon(
-                        Icons.person_outline_rounded,
-                        color: cs.primary,
-                        size: 20,
+                  return Material(
+                    color: Colors.transparent,
+                    child: ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: cs.primary.withValues(alpha: 0.1),
+                        child: Icon(
+                          Icons.person_outline_rounded,
+                          color: cs.primary,
+                          size: 20,
+                        ),
                       ),
-                    ),
-                    title: Text(
-                      email,
-                      style: GoogleFonts.poppins(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
+                      title: Text(
+                        email,
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
                       ),
-                    ),
-                    subtitle: Text(
-                      'Access: Appointments only',
-                      style: GoogleFonts.poppins(
-                        fontSize: 11,
-                        color: cs.onSurface.withValues(alpha: 0.5),
+                      subtitle: Text(
+                        'Access: Appointments only',
+                        style: GoogleFonts.poppins(
+                          fontSize: 11,
+                          color: cs.onSurface.withValues(alpha: 0.5),
+                        ),
                       ),
-                    ),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          icon: const Icon(
-                            Icons.chat_bubble_outline_rounded,
-                            size: 20,
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(
+                              Icons.chat_bubble_outline_rounded,
+                              size: 20,
+                            ),
+                            tooltip: 'Clinic Chat',
+                            onPressed: () => context.push('/chat'),
                           ),
-                          tooltip: 'Clinic Chat',
-                          onPressed: () => context.push('/chat'),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.edit_outlined, size: 20),
-                          tooltip: 'Edit Password',
-                          onPressed: () =>
-                              _addOrEditStaff(existingStaff: staff),
-                        ),
-                        IconButton(
-                          icon: Icon(
-                            Icons.delete_outline_rounded,
-                            size: 20,
-                            color: cs.error,
+                          IconButton(
+                            icon: const Icon(Icons.edit_outlined, size: 20),
+                            tooltip: 'Edit Password',
+                            onPressed: () =>
+                                _addOrEditStaff(existingStaff: staff),
                           ),
-                          tooltip: 'Delete Account',
-                          onPressed: () => _deleteStaff(email),
-                        ),
-                      ],
+                          IconButton(
+                            icon: Icon(
+                              Icons.delete_outline_rounded,
+                              size: 20,
+                              color: cs.error,
+                            ),
+                            tooltip: 'Delete Account',
+                            onPressed: () => _deleteStaff(email),
+                          ),
+                        ],
+                      ),
                     ),
                   );
                 },

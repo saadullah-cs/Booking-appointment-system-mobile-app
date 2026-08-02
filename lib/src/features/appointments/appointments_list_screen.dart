@@ -12,11 +12,11 @@ import 'package:url_launcher/url_launcher_string.dart';
 import '../shared/widgets/app_shell_scaffold.dart';
 import '../shared/widgets/premium_card.dart';
 import '../../models/appointment.dart';
-import '../appointments/appointment_repository.dart';
 import '../../theme/app_theme.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../services/repository_providers.dart';
 import '../../services/payment_gateway_service.dart';
+import '../../services/notification_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'widgets/visual_calendar_widget.dart';
 
@@ -30,10 +30,7 @@ class AppointmentsListScreen extends ConsumerStatefulWidget {
 
 class _AppointmentsListScreenState extends ConsumerState<AppointmentsListScreen>
     with SingleTickerProviderStateMixin {
-  AppointmentRepository get _repository =>
-      ref.read(appointmentRepositoryProvider);
-  List<Appointment> _appointments = [];
-  bool _isLoading = false;
+  final bool _isLoading = false;
   bool _isCalendarView = false;
   final _searchController = TextEditingController();
   String _searchQuery = '';
@@ -41,6 +38,8 @@ class _AppointmentsListScreenState extends ConsumerState<AppointmentsListScreen>
   String _selectedUrgency = 'All';
   String _selectedTreatmentType = 'All';
   bool _isFilterExpanded = false;
+
+  List<Appointment> get _appointments => ref.read(appointmentsProvider);
 
   Future<void> _exportAppointments() async {
     try {
@@ -173,7 +172,7 @@ class _AppointmentsListScreenState extends ConsumerState<AppointmentsListScreen>
         jsonEncode(imported.map((item) => item.toJson()).toList()),
       );
 
-      await _load();
+      await ref.read(appointmentsProvider.notifier).load();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -199,7 +198,6 @@ class _AppointmentsListScreenState extends ConsumerState<AppointmentsListScreen>
     _searchController.addListener(
       () => setState(() => _searchQuery = _searchController.text.toLowerCase()),
     );
-    _load();
   }
 
   @override
@@ -209,13 +207,16 @@ class _AppointmentsListScreenState extends ConsumerState<AppointmentsListScreen>
     super.dispose();
   }
 
-  Future<void> _load() async {
-    final apts = await _repository.loadAppointments();
-    if (!mounted) return;
-    setState(() {
-      _appointments = apts;
-      _isLoading = false;
-    });
+  Future<void> _deleteAppointment(String id) async {
+    // Delete via provider for real-time sync
+    await ref.read(appointmentsProvider.notifier).delete(id);
+    
+    // Logic Fix: Cancel scheduled notifications on deletion
+    try {
+      await NotificationService().cancelAppointmentNotifications(id);
+    } catch (e) {
+      debugPrint('Failed to cancel notifications on delete: $e');
+    }
   }
 
   Future<void> _retryPayment(Appointment apt) async {
@@ -281,64 +282,6 @@ class _AppointmentsListScreenState extends ConsumerState<AppointmentsListScreen>
         .toList();
     types.sort();
     return ['All', ...types];
-  }
-
-  List<Appointment> _filter(String type) {
-    final now = DateTime.now();
-    List<Appointment> result;
-    switch (type) {
-      case 'upcoming':
-        result = _appointments.where((a) {
-          final d = a.scheduledAt;
-          return d != null &&
-              d.isAfter(now) &&
-              a.status.toLowerCase() != 'cancelled';
-        }).toList()..sort((a, b) => a.scheduledAt!.compareTo(b.scheduledAt!));
-        break;
-      case 'past':
-        result = _appointments.where((a) {
-          final d = a.scheduledAt;
-          return (d != null && d.isBefore(now)) ||
-              a.status.toLowerCase() == 'completed';
-        }).toList();
-        break;
-      case 'cancelled':
-        result = _appointments
-            .where((a) => a.status.toLowerCase() == 'cancelled')
-            .toList();
-        break;
-      default:
-        result = _appointments;
-    }
-
-    result = result.where((a) => _matchesDuration(a.scheduledAt)).toList();
-
-    // Apply Urgency filter
-    if (_selectedUrgency == 'Emergency') {
-      result = result.where((a) => a.isEmergency).toList();
-    } else if (_selectedUrgency == 'Standard') {
-      result = result.where((a) => !a.isEmergency).toList();
-    }
-
-    // Apply Treatment Type filter
-    if (_selectedTreatmentType != 'All') {
-      result = result
-          .where(
-            (a) =>
-                a.treatmentType.toLowerCase() ==
-                _selectedTreatmentType.toLowerCase(),
-          )
-          .toList();
-    }
-
-    if (_searchQuery.isEmpty) return result;
-    return result
-        .where(
-          (a) =>
-              a.patientName.toLowerCase().contains(_searchQuery) ||
-              a.treatmentType.toLowerCase().contains(_searchQuery),
-        )
-        .toList();
   }
 
   Widget _buildDurationFilterChips(ColorScheme cs) {
@@ -458,9 +401,69 @@ class _AppointmentsListScreenState extends ConsumerState<AppointmentsListScreen>
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final upcoming = _filter('upcoming');
-    final past = _filter('past');
-    final cancelled = _filter('cancelled');
+    final appointments = ref.watch(appointmentsProvider);
+    
+    // Internal filter logic using the watched state
+    List<Appointment> filterByType(String type, List<Appointment> list) {
+      final now = DateTime.now();
+      List<Appointment> result;
+      switch (type) {
+        case 'upcoming':
+          result = list.where((a) {
+            final d = a.scheduledAt;
+            return d != null &&
+                d.isAfter(now) &&
+                a.status.toLowerCase() != 'cancelled' &&
+                a.status.toLowerCase() != 'completed';
+          }).toList()..sort((a, b) => a.scheduledAt!.compareTo(b.scheduledAt!));
+          break;
+        case 'past':
+          result = list.where((a) {
+            final d = a.scheduledAt;
+            return (d != null && d.isBefore(now)) ||
+                a.status.toLowerCase() == 'completed';
+          }).toList();
+          break;
+        case 'cancelled':
+          result = list
+              .where((a) => a.status.toLowerCase() == 'cancelled')
+              .toList();
+          break;
+        default:
+          result = list;
+      }
+
+      result = result.where((a) => _matchesDuration(a.scheduledAt)).toList();
+
+      if (_selectedUrgency == 'Emergency') {
+        result = result.where((a) => a.isEmergency).toList();
+      } else if (_selectedUrgency == 'Standard') {
+        result = result.where((a) => !a.isEmergency).toList();
+      }
+
+      if (_selectedTreatmentType != 'All') {
+        result = result
+            .where(
+              (a) =>
+                  a.treatmentType.toLowerCase() ==
+                  _selectedTreatmentType.toLowerCase(),
+            )
+            .toList();
+      }
+
+      if (_searchQuery.isEmpty) return result;
+      return result
+          .where(
+            (a) =>
+                a.patientName.toLowerCase().contains(_searchQuery) ||
+                a.treatmentType.toLowerCase().contains(_searchQuery),
+          )
+          .toList();
+    }
+
+    final upcoming = filterByType('upcoming', appointments);
+    final past = filterByType('past', appointments);
+    final cancelled = filterByType('cancelled', appointments);
 
     return AppShellScaffold(
       title: 'All Appointments',
@@ -691,7 +694,7 @@ class _AppointmentsListScreenState extends ConsumerState<AppointmentsListScreen>
                 physics: const BouncingScrollPhysics(),
                 padding: const EdgeInsets.all(16),
                 child: VisualCalendarWidget(
-                  appointments: _appointments,
+                  appointments: appointments,
                   onAppointmentTap: (apt) {
                     context.push('/appointment/${apt.id}', extra: apt);
                   },
@@ -742,21 +745,27 @@ class _AppointmentsListScreenState extends ConsumerState<AppointmentsListScreen>
                       children: [
                         _AppointmentListView(
                           appointments: upcoming,
-                          onRefresh: _load,
+                          onRefresh: () =>
+                              ref.read(appointmentsProvider.notifier).load(),
                           emptyMessage: 'No upcoming appointments',
                           onRetryPayment: _retryPayment,
+                          onDelete: _deleteAppointment,
                         ),
                         _AppointmentListView(
                           appointments: past,
-                          onRefresh: _load,
+                          onRefresh: () =>
+                              ref.read(appointmentsProvider.notifier).load(),
                           emptyMessage: 'No past appointments',
                           onRetryPayment: _retryPayment,
+                          onDelete: _deleteAppointment,
                         ),
                         _AppointmentListView(
                           appointments: cancelled,
-                          onRefresh: _load,
+                          onRefresh: () =>
+                              ref.read(appointmentsProvider.notifier).load(),
                           emptyMessage: 'No cancelled appointments',
                           onRetryPayment: _retryPayment,
+                          onDelete: _deleteAppointment,
                         ),
                       ],
                     ),
@@ -774,11 +783,13 @@ class _AppointmentListView extends StatelessWidget {
     required this.onRefresh,
     required this.emptyMessage,
     this.onRetryPayment,
+    this.onDelete,
   });
   final List<Appointment> appointments;
   final Future<void> Function() onRefresh;
   final String emptyMessage;
   final Function(Appointment)? onRetryPayment;
+  final Function(String)? onDelete;
 
   Future<void> _launchWhatsApp(
     BuildContext context,
@@ -903,276 +914,324 @@ class _AppointmentListView extends StatelessWidget {
 
           return Padding(
             padding: const EdgeInsets.only(bottom: 12),
-            child: PremiumCard(
-              padding: EdgeInsets.zero,
-              child: InkWell(
-                onTap: () => context
-                    .push('/appointment/${apt.id}')
-                    .then((_) => onRefresh()),
-                borderRadius: BorderRadius.circular(24),
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Row(
-                    children: [
-                      // Elegant calendar-block indicator on the left
-                      Container(
-                        width: 58,
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 8,
-                          horizontal: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: cs.primary.withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              dayStr,
-                              style: GoogleFonts.poppins(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w800,
-                                color: cs.primary,
-                                height: 1.1,
-                              ),
-                            ),
-                            Text(
-                              monthStr,
-                              style: GoogleFonts.poppins(
-                                fontSize: 9.5,
-                                fontWeight: FontWeight.w700,
-                                color: cs.primary.withValues(alpha: 0.7),
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            FittedBox(
-                              fit: BoxFit.scaleDown,
-                              child: Text(
-                                timeStr,
-                                style: GoogleFonts.poppins(
-                                  fontSize: 8.5,
-                                  fontWeight: FontWeight.w600,
-                                  color: cs.onSurface.withValues(alpha: 0.5),
-                                ),
-                              ),
-                            ),
-                          ],
+            child: Dismissible(
+              key: Key(apt.id),
+              direction: DismissDirection.endToStart,
+              background: Container(
+                alignment: Alignment.centerRight,
+                padding: const EdgeInsets.only(right: 20),
+                decoration: BoxDecoration(
+                  color: Colors.red.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: const Icon(
+                  Icons.delete_outline_rounded,
+                  color: Colors.red,
+                ),
+              ),
+              confirmDismiss: (_) async {
+                return await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: Text(
+                      'Delete appointment',
+                      style: GoogleFonts.poppins(fontWeight: FontWeight.w700),
+                    ),
+                    content: Text(
+                      'Remove ${apt.patientName}\'s appointment?',
+                      style: GoogleFonts.poppins(),
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx, false),
+                        child: const Text('Cancel'),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx, true),
+                        child: Text(
+                          'Delete',
+                          style: TextStyle(color: cs.error),
                         ),
                       ),
-                      const SizedBox(width: 14),
-                      // Center content
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    apt.patientName,
-                                    style: GoogleFonts.poppins(
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 14.5,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
+                    ],
+                  ),
+                );
+              },
+              onDismissed: (_) => onDelete?.call(apt.id),
+              child: PremiumCard(
+                padding: EdgeInsets.zero,
+                child: InkWell(
+                  onTap: () => context
+                      .push('/appointment/${apt.id}')
+                      .then((_) => onRefresh()),
+                  borderRadius: BorderRadius.circular(24),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Row(
+                      children: [
+                        // Elegant calendar-block indicator on the left
+                        Container(
+                          width: 58,
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 8,
+                            horizontal: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: cs.primary.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                dayStr,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w800,
+                                  color: cs.primary,
+                                  height: 1.1,
+                                ),
+                              ),
+                              Text(
+                                monthStr,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: cs.primary.withValues(alpha: 0.7),
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  timeStr,
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 8.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: cs.onSurface.withValues(alpha: 0.5),
                                   ),
                                 ),
-                                if (apt.isEmergency) ...[
-                                  const SizedBox(width: 4),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 5,
-                                      vertical: 2,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFFEE2E2),
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        // Center content
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
                                     child: Text(
-                                      'EMG',
+                                      apt.patientName,
                                       style: GoogleFonts.poppins(
-                                        fontSize: 8,
-                                        fontWeight: FontWeight.w800,
-                                        color: const Color(0xFFEF4444),
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 14.5,
                                       ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  if (apt.isEmergency) ...[
+                                    const SizedBox(width: 4),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 5,
+                                        vertical: 2,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFFEE2E2),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        'EMG',
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 8,
+                                          fontWeight: FontWeight.w800,
+                                          color: const Color(0xFFEF4444),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                apt.treatmentType,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 11.5,
+                                  color: cs.onSurface.withValues(alpha: 0.6),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 4),
+                              // Payment Status Badge
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: apt.paymentStatus == 'paid'
+                                      ? Colors.green.withValues(alpha: 0.12)
+                                      : Colors.orange.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                    color: apt.paymentStatus == 'paid'
+                                        ? Colors.green.withValues(alpha: 0.2)
+                                        : Colors.orange.withValues(alpha: 0.2),
+                                  ),
+                                ),
+                                child: Text(
+                                  apt.paymentStatus == 'paid'
+                                      ? 'PAID'
+                                      : 'UNPAID',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 8,
+                                    fontWeight: FontWeight.w800,
+                                    color: apt.paymentStatus == 'paid'
+                                        ? Colors.green
+                                        : Colors.orange,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.phone_rounded,
+                                    size: 12,
+                                    color: cs.onSurface.withValues(alpha: 0.4),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    apt.phoneNumber.isNotEmpty
+                                        ? apt.phoneNumber
+                                        : 'No phone number',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 10.5,
+                                      color:
+                                          cs.onSurface.withValues(alpha: 0.45),
                                     ),
                                   ),
                                 ],
-                              ],
-                            ),
-                            const SizedBox(height: 3),
-                            Text(
-                              apt.treatmentType,
-                              style: GoogleFonts.poppins(
-                                fontSize: 11.5,
-                                color: cs.onSurface.withValues(alpha: 0.6),
-                                fontWeight: FontWeight.w500,
                               ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 4),
-                            // Payment Status Badge
+                              if (apt.paymentMethod == 'online' &&
+                                  apt.paymentStatus == 'pending') ...[
+                                const SizedBox(height: 6),
+                                SizedBox(
+                                  height: 26,
+                                  child: TextButton.icon(
+                                    onPressed: () => onRetryPayment?.call(apt),
+                                    icon: const Icon(
+                                      Icons.payment_rounded,
+                                      size: 12,
+                                    ),
+                                    label: const Text('Pay Now'),
+                                    style: TextButton.styleFrom(
+                                      backgroundColor: Colors.blueAccent
+                                          .withValues(alpha: 0.1),
+                                      foregroundColor: Colors.blueAccent,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      textStyle: GoogleFonts.poppins(
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                      minimumSize: Size.zero,
+                                      tapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        // Status & Quick Navigation Actions on the right
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
                             Container(
                               padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 2,
+                                horizontal: 8,
+                                vertical: 4,
                               ),
                               decoration: BoxDecoration(
-                                color: apt.paymentStatus == 'paid'
-                                    ? Colors.green.withValues(alpha: 0.12)
-                                    : Colors.orange.withValues(alpha: 0.12),
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(
-                                  color: apt.paymentStatus == 'paid'
-                                      ? Colors.green.withValues(alpha: 0.2)
-                                      : Colors.orange.withValues(alpha: 0.2),
-                                ),
+                                color: sBg,
+                                borderRadius: BorderRadius.circular(20),
                               ),
                               child: Text(
-                                apt.paymentStatus == 'paid' ? 'PAID' : 'UNPAID',
+                                apt.status,
                                 style: GoogleFonts.poppins(
-                                  fontSize: 8,
-                                  fontWeight: FontWeight.w800,
-                                  color: apt.paymentStatus == 'paid'
-                                      ? Colors.green
-                                      : Colors.orange,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w700,
+                                  color: sColor,
                                 ),
                               ),
                             ),
-                            const SizedBox(height: 4),
+                            const SizedBox(height: 8),
                             Row(
+                              mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(
-                                  Icons.phone_rounded,
-                                  size: 12,
-                                  color: cs.onSurface.withValues(alpha: 0.4),
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  apt.phoneNumber.isNotEmpty
-                                      ? apt.phoneNumber
-                                      : 'No phone number',
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 10.5,
-                                    color: cs.onSurface.withValues(alpha: 0.45),
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.call_rounded,
+                                    size: 17,
+                                    color: Color(0xFF10B981),
                                   ),
+                                  onPressed: () =>
+                                      _makeCall(context, apt.phoneNumber),
+                                  tooltip: 'Call Patient',
+                                  constraints: const BoxConstraints(),
+                                  padding: const EdgeInsets.all(4),
+                                ),
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.chat_bubble_rounded,
+                                    size: 17,
+                                    color: Color(0xFF25D366),
+                                  ),
+                                  onPressed: () => _launchWhatsApp(
+                                    context,
+                                    apt.phoneNumber,
+                                    apt.patientName,
+                                    timeStr,
+                                  ),
+                                  tooltip: 'WhatsApp',
+                                  constraints: const BoxConstraints(),
+                                  padding: const EdgeInsets.all(4),
+                                ),
+                                IconButton(
+                                  icon: Icon(
+                                    Icons.history_rounded,
+                                    size: 17,
+                                    color: cs.primary.withValues(alpha: 0.7),
+                                  ),
+                                  onPressed: () {
+                                    context.push(
+                                      '/patient-history?name=${Uri.encodeComponent(apt.patientName)}&phone=${Uri.encodeComponent(apt.phoneNumber)}',
+                                    );
+                                  },
+                                  tooltip: 'Patient History',
+                                  constraints: const BoxConstraints(),
+                                  padding: const EdgeInsets.all(4),
                                 ),
                               ],
                             ),
-                            if (apt.paymentMethod == 'online' &&
-                                apt.paymentStatus == 'pending') ...[
-                              const SizedBox(height: 6),
-                              SizedBox(
-                                height: 26,
-                                child: TextButton.icon(
-                                  onPressed: () => onRetryPayment?.call(apt),
-                                  icon: const Icon(
-                                    Icons.payment_rounded,
-                                    size: 12,
-                                  ),
-                                  label: const Text('Pay Now'),
-                                  style: TextButton.styleFrom(
-                                    backgroundColor: Colors.blueAccent
-                                        .withValues(alpha: 0.1),
-                                    foregroundColor: Colors.blueAccent,
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                    ),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    textStyle: GoogleFonts.poppins(
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                    minimumSize: Size.zero,
-                                    tapTargetSize:
-                                        MaterialTapTargetSize.shrinkWrap,
-                                  ),
-                                ),
-                              ),
-                            ],
                           ],
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      // Status & Quick Navigation Actions on the right
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: sBg,
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Text(
-                              apt.status,
-                              style: GoogleFonts.poppins(
-                                fontSize: 9,
-                                fontWeight: FontWeight.w700,
-                                color: sColor,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                icon: const Icon(
-                                  Icons.call_rounded,
-                                  size: 17,
-                                  color: Color(0xFF10B981),
-                                ),
-                                onPressed: () =>
-                                    _makeCall(context, apt.phoneNumber),
-                                tooltip: 'Call Patient',
-                                constraints: const BoxConstraints(),
-                                padding: const EdgeInsets.all(4),
-                              ),
-                              IconButton(
-                                icon: const Icon(
-                                  Icons.chat_bubble_rounded,
-                                  size: 17,
-                                  color: Color(0xFF25D366),
-                                ),
-                                onPressed: () => _launchWhatsApp(
-                                  context,
-                                  apt.phoneNumber,
-                                  apt.patientName,
-                                  timeStr,
-                                ),
-                                tooltip: 'WhatsApp',
-                                constraints: const BoxConstraints(),
-                                padding: const EdgeInsets.all(4),
-                              ),
-                              IconButton(
-                                icon: Icon(
-                                  Icons.history_rounded,
-                                  size: 17,
-                                  color: cs.primary.withValues(alpha: 0.7),
-                                ),
-                                onPressed: () {
-                                  context.push(
-                                    '/patient-history?name=${Uri.encodeComponent(apt.patientName)}&phone=${Uri.encodeComponent(apt.phoneNumber)}',
-                                  );
-                                },
-                                tooltip: 'Patient History',
-                                constraints: const BoxConstraints(),
-                                padding: const EdgeInsets.all(4),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),

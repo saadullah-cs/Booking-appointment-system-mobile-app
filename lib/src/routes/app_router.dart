@@ -7,6 +7,7 @@ import '../features/appointments/booking_screen.dart';
 import '../features/appointments/appointments_list_screen.dart';
 import '../features/analytics/analytics_screen.dart';
 import '../features/auth/screens/login_screen.dart';
+import '../features/auth/screens/splash_entry_screen.dart';
 import '../features/calculator/calculator_screen.dart';
 
 import '../features/dashboard/dashboard_screen.dart';
@@ -15,7 +16,6 @@ import '../features/patient/profile_screen.dart';
 import '../features/patient/patient_history_screen.dart';
 import '../features/payments/payment_screen.dart';
 import '../features/appointments/appointment_detail_screen.dart';
-
 
 import '../features/auth/screens/security_settings_screen.dart';
 import '../features/auth/screens/security_lock_screen.dart';
@@ -31,12 +31,12 @@ final appNavigatorKey = GlobalKey<NavigatorState>();
 final appRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     navigatorKey: appNavigatorKey,
-    initialLocation: '/login',
+    initialLocation: '/',
     routes: <GoRoute>[
       GoRoute(
         path: '/',
         name: 'splash',
-        builder: (context, state) => const LoginScreen(),
+        builder: (context, state) => const SplashEntryScreen(),
       ),
       GoRoute(
         path: '/login',

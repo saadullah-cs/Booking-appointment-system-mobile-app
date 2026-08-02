@@ -54,6 +54,9 @@ class _SplashEntryScreenState extends State<SplashEntryScreen>
 
   Future<void> _handleRedirect() async {
     final prefs = await AppPreferences.instance.prefs;
+    // Reset unlock status on cold boot so security screen always shows
+    await prefs.setBool('security_unlocked', false);
+
     final isStaffLoggedIn = prefs.getBool('is_staff_logged_in') ?? false;
     if (isStaffLoggedIn) {
       if (mounted) {
@@ -84,6 +87,8 @@ class _SplashEntryScreenState extends State<SplashEntryScreen>
             await FirebaseAuth.instance.signOut();
             final prefs = await AppPreferences.instance.prefs;
             await prefs.remove('local_auth_current_user');
+            if (mounted) context.go('/login');
+            return;
           }
         }
       }
@@ -117,7 +122,6 @@ class _SplashEntryScreenState extends State<SplashEntryScreen>
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
-    final theme = Theme.of(context);
 
     return Scaffold(
       body: Container(

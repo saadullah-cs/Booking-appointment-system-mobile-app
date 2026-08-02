@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+import 'package:uuid/uuid.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../features/shared/widgets/app_shell_scaffold.dart';
@@ -180,10 +181,6 @@ class _BookingScreenState extends ConsumerState<BookingScreen>
     _totalSessionsController.dispose();
     _durationController.dispose();
     _animController.dispose();
-    _emailController.dispose();
-    _nameController.dispose();
-    _phoneController.dispose();
-    _professionController.dispose();
     super.dispose();
   }
 
@@ -298,28 +295,31 @@ class _BookingScreenState extends ConsumerState<BookingScreen>
               ),
               content: Text(
                 'This time slot conflicts with an existing appointment (enforcing $_durationMinutes-minute gap):\n\n'
-                '• Patient: ${conflict!.patientName}\n'
-                '• Booked Time: ${DateFormat('hh:mm a').format(conflict.scheduledAt!)}\n\n'
-                'The next available conflict-free slot is:\n'
-                '• $suggestedDateText at $suggestedTimeText\n\n'
-                'Would you like to book this suggested slot instead?',
+                'Requested: $formattedDate at $_selectedSlot\n'
+                'Next Free: $suggestedDateText at $suggestedTimeText\n\n'
+                'Would you like to auto-adjust to the next available time?',
                 style: GoogleFonts.poppins(fontSize: 14),
               ),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel'),
+                  child: const Text('Go back'),
                 ),
                 ElevatedButton(
                   onPressed: () {
                     Navigator.pop(context);
                     setState(() {
-                      _selectedDate = nextAvailable;
-                      _selectedSlot = suggestedTimeText;
-                      _step = 2; // Jump to Review step
+                      _selectedDate = DateTime(
+                        nextAvailable.year,
+                        nextAvailable.month,
+                        nextAvailable.day,
+                      );
+                      _selectedSlot = DateFormat(
+                        'hh:mm a',
+                      ).format(nextAvailable);
                     });
                   },
-                  child: const Text('Use Suggested Slot'),
+                  child: const Text('Auto-Adjust'),
                 ),
               ],
             ),
@@ -329,42 +329,34 @@ class _BookingScreenState extends ConsumerState<BookingScreen>
         return;
       }
 
-      int seq = appointments.length + 1;
-      String formattedId = 'GCT-NSR-${seq.toString().padLeft(4, '0')}';
-      while (appointments.any((a) => a.id == formattedId)) {
-        seq++;
-        formattedId = 'GCT-NSR-${seq.toString().padLeft(4, '0')}';
-      }
-
       final newAppt = Appointment(
-        id: formattedId,
+        id: const Uuid().v4(),
         patientName: _nameController.text.trim(),
-        time: '$formattedDate • $_selectedSlot',
-        treatmentType: _service,
-        status: 'Pending',
-        scheduledAt: scheduledDateTime,
         phoneNumber: _phoneController.text.trim(),
         email: _emailController.text.trim(),
+        time: _selectedSlot!,
+        scheduledAt: scheduledDateTime,
+        treatmentType: _service,
+        status: 'Pending',
+        isEmergency: _isEmergency,
         visitReason: _reasonController.text.trim(),
         patientNote: _notesController.text.trim(),
-        updatedAt: DateTime.now(),
-        isEmergency: _isEmergency,
         patientProfession: _professionController.text.trim(),
         treatmentPlanTotalSessions: _treatmentPlanTotalSessions,
         sessionNumber: _sessionNumber,
         durationMinutes: _durationMinutes,
         dateOfBirth: _selectedDob,
         posturalPhotoPath: _posturalPhotoPath ?? '',
-        paymentMethod: _paymentMode.name,
-        paymentStatus: 'pending', // Save as pending FIRST for gateway security
+        paymentMethod: _paymentMode == PaymentMode.online ? 'online' : 'cash',
+        paymentStatus: 'pending',
         amount: _currentPrice,
+        updatedAt: DateTime.now(),
       );
 
       // Save initial record to Firestore with 'pending' status
       final bool wasSynced = await _repository.saveAppointment(newAppt);
 
       if (!wasSynced) {
-        // Display toast for offline booking
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -416,34 +408,24 @@ class _BookingScreenState extends ConsumerState<BookingScreen>
             }
           }
         } catch (e) {
-          debugPrint('Online Payment Simulation failed: $e');
+          debugPrint('Online payment failed to init: $e');
         }
       }
 
-      // Trigger instant booking notification
+      // Schedule local notifications
       try {
-        await NotificationService().showLocalNotification(
-          'Appointment Booked! 📅',
-          'Patient: ${_nameController.text.trim()} • $_selectedSlot on $formattedDate',
-          payload: '/appointment/$formattedId',
-        );
-
-        // Schedule dynamic alarm/notification reminders
         await NotificationService().scheduleAppointmentReminders(newAppt);
       } catch (e) {
-        debugPrint('Failed to trigger local notifications: $e');
+        debugPrint('Notification scheduling failed: $e');
       }
 
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Appointment booked successfully! ✅')),
-      );
-      context.go('/dashboard');
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Booking failed: ${error.toString()}')),
-      );
+      _goStep(2);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
+      }
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
@@ -451,406 +433,362 @@ class _BookingScreenState extends ConsumerState<BookingScreen>
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
 
     return AppShellScaffold(
       title: 'Book Appointment',
       currentRoute: '/booking',
-      body: Column(
-        children: [
-          // Step indicator
-          _StepIndicator(currentStep: _step),
-
-          Expanded(
-            child: FadeTransition(
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            _buildStepper(cs),
+            const SizedBox(height: 24),
+            FadeTransition(
               opacity: _fadeAnim,
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 350),
-                  child: _step == 0
-                      ? _buildStep0(cs)
-                      : _step == 1
-                      ? _buildStep1(cs)
-                      : _buildStep2(cs),
-                ),
-              ),
+              child: _step == 0
+                  ? _buildPersonalInfoStep(cs)
+                  : _step == 1
+                  ? _buildSchedulingStep(cs)
+                  : _buildSuccessStep(cs),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
-  // ── Step 0: Patient Info
-  Widget _buildStep0(ColorScheme cs) {
+  Widget _buildStepper(ColorScheme cs) {
+    return Row(
+      children: [
+        _stepCircle(0, 'Details', cs),
+        _stepLine(cs),
+        _stepCircle(1, 'Schedule', cs),
+        _stepLine(cs),
+        _stepCircle(2, 'Done', cs),
+      ],
+    );
+  }
+
+  Widget _stepCircle(int step, String label, ColorScheme cs) {
+    final isActive = _step == step;
+    final isDone = _step > step;
+    return Column(
+      children: [
+        Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: isDone
+                ? AppColors.statusConfirmed
+                : isActive
+                ? cs.primary
+                : cs.surfaceContainerHighest,
+            border: isActive
+                ? Border.all(color: cs.primary.withValues(alpha: 0.2), width: 4)
+                : null,
+          ),
+          child: Center(
+            child: isDone
+                ? const Icon(Icons.check, color: Colors.white, size: 16)
+                : Text(
+                    (step + 1).toString(),
+                    style: GoogleFonts.poppins(
+                      color: isActive ? Colors.white : cs.onSurfaceVariant,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: GoogleFonts.poppins(
+            fontSize: 10,
+            fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+            color: isActive ? cs.primary : cs.onSurfaceVariant,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _stepLine(ColorScheme cs) {
+    return Expanded(
+      child: Container(
+        height: 2,
+        margin: const EdgeInsets.only(bottom: 16),
+        color: cs.surfaceContainerHighest,
+      ),
+    );
+  }
+
+  Widget _buildPersonalInfoStep(ColorScheme cs) {
     return Form(
       key: _formKey,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Doctor info card
-          PremiumCard(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: cs.primary.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Icon(
-                    Icons.event_available_rounded,
-                    color: cs.primary,
-                    size: 26,
-                  ),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Book Your Visit',
-                        style: GoogleFonts.poppins(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 15,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Select a treatment and enter details below.',
-                        style: GoogleFonts.poppins(
-                          fontSize: 12,
-                          color: cs.onSurface.withValues(alpha: 0.55),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 18),
-
-          // Service selector
-          Text(
-            'Select Treatment',
-            style: GoogleFonts.poppins(
-              fontWeight: FontWeight.w600,
-              fontSize: 14,
-            ),
-          ),
-          const SizedBox(height: 10),
-          ...List.generate(
-            _services.length,
-            (i) => _ServiceTile(
-              service: _services[i],
-              icon: _serviceIcons[i],
-              color: _serviceColors[i],
-              isSelected: _service == _services[i],
-              onTap: () => setState(() => _service = _services[i]),
-            ),
-          ),
-          const SizedBox(height: 18),
-
           Text(
             'Patient Information',
             style: GoogleFonts.poppins(
-              fontWeight: FontWeight.w600,
-              fontSize: 14,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
             ),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 16),
           PremiumCard(
-            padding: const EdgeInsets.all(18),
+            padding: const EdgeInsets.all(20),
             child: Column(
               children: [
                 TextFormField(
                   controller: _nameController,
                   decoration: const InputDecoration(
-                    hintText: 'Full name',
+                    labelText: 'Full Name',
                     prefixIcon: Icon(Icons.person_outline_rounded),
                   ),
-                  validator: (v) => Validators.requiredField(v, 'full name'),
+                  validator: (v) => v!.isEmpty ? 'Required' : null,
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _phoneController,
-                  keyboardType: TextInputType.phone,
                   decoration: const InputDecoration(
-                    hintText: 'Phone number',
+                    labelText: 'Phone Number',
                     prefixIcon: Icon(Icons.phone_outlined),
+                    hintText: 'e.g. 03xx-xxxxxxx',
                   ),
-                  validator: (v) => Validators.requiredField(v, 'phone number'),
+                  keyboardType: TextInputType.phone,
+                  validator: (v) => v!.isEmpty ? 'Required' : null,
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _emailController,
-                  keyboardType: TextInputType.emailAddress,
                   decoration: const InputDecoration(
-                    hintText: 'Email (optional)',
+                    labelText: 'Email Address',
                     prefixIcon: Icon(Icons.mail_outline_rounded),
                   ),
+                  keyboardType: TextInputType.emailAddress,
+                  validator: (v) => v!.isEmpty ? 'Required' : null,
                 ),
-                const SizedBox(height: 14),
-                TextFormField(
-                  controller: _professionController,
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
                   decoration: const InputDecoration(
-                    hintText: 'Profession (optional)',
+                    labelText: 'Profession',
                     prefixIcon: Icon(Icons.work_outline_rounded),
                   ),
+                  items:
+                      [
+                            'Engineer',
+                            'Doctor',
+                            'Teacher',
+                            'Student',
+                            'Office Worker',
+                            'Driver',
+                            'Laborer',
+                            'Retired',
+                            'Housewife',
+                            'Businessman',
+                            'Nurse',
+                            'Salesperson',
+                            'Accountant',
+                            'Builder/Mason',
+                            'Farmer',
+                            'Unemployed',
+                            'Self-employed',
+                            'Artist',
+                            'Software Developer',
+                            'Security Guard',
+                            'Police Officer',
+                            'Soldier',
+                            'Tailor',
+                            'Shopkeeper',
+                            'Chef',
+                            'Other',
+                          ]
+                          .map(
+                            (p) => DropdownMenuItem(value: p, child: Text(p)),
+                          )
+                          .toList(),
+                  onChanged: (v) => _professionController.text = v ?? '',
                 ),
-                const SizedBox(height: 14),
-                TextFormField(
-                  controller: _reasonController,
-                  maxLines: 3,
-                  decoration: const InputDecoration(
-                    hintText: 'Reason for visit *',
-                    prefixIcon: Padding(
-                      padding: EdgeInsets.only(bottom: 42),
-                      child: Icon(Icons.edit_note_rounded),
-                    ),
-                  ),
-                  validator: (v) => Validators.requiredField(v, 'visit reason'),
-                ),
-                const SizedBox(height: 14),
-                TextFormField(
-                  controller: _notesController,
-                  maxLines: 2,
-                  decoration: const InputDecoration(
-                    hintText: 'Additional notes (optional)',
-                    prefixIcon: Padding(
-                      padding: EdgeInsets.only(bottom: 24),
-                      child: Icon(Icons.notes_rounded),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                TextFormField(
-                  controller: _totalSessionsController,
-                  keyboardType: TextInputType.number,
-                  decoration: InputDecoration(
-                    hintText: 'Treatment Plan Total Sessions (Optional)',
-                    prefixIcon: const Icon(Icons.playlist_add_check_rounded),
-                    suffixIcon: PopupMenuButton<int?>(
-                      icon: const Icon(Icons.arrow_drop_down_rounded, size: 28),
-                      onSelected: (val) {
-                        setState(() {
-                          _treatmentPlanTotalSessions = val;
-                          _totalSessionsController.text = val == null
-                              ? ''
-                              : val.toString();
-                          if (val != null) {
-                            if (_sessionNumber == null || _sessionNumber == 0) {
-                              _sessionNumber = 1;
-                              _sessionNumberController.text = '1';
-                            }
-                          } else {
-                            _sessionNumber = null;
-                            _sessionNumberController.clear();
-                          }
-                        });
-                      },
-                      itemBuilder: (_) => [
-                        PopupMenuItem(
-                          value: null,
-                          child: Text(
-                            'None (Single Session)',
-                            style: GoogleFonts.poppins(fontSize: 13),
-                          ),
-                        ),
-                        PopupMenuItem(
-                          value: 6,
-                          child: Text(
-                            '6 Sessions Plan',
-                            style: GoogleFonts.poppins(fontSize: 13),
-                          ),
-                        ),
-                        PopupMenuItem(
-                          value: 8,
-                          child: Text(
-                            '8 Sessions Plan',
-                            style: GoogleFonts.poppins(fontSize: 13),
-                          ),
-                        ),
-                        PopupMenuItem(
-                          value: 12,
-                          child: Text(
-                            '12 Sessions Plan',
-                            style: GoogleFonts.poppins(fontSize: 13),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  onChanged: (v) {
-                    setState(() {
-                      final n = int.tryParse(v);
-                      _treatmentPlanTotalSessions = n;
-                      if (n != null && n > 0) {
-                        if (_sessionNumber == null || _sessionNumber == 0) {
-                          _sessionNumber = 1;
-                          _sessionNumberController.text = '1';
-                        }
-                      } else {
-                        _sessionNumber = null;
-                        _sessionNumberController.clear();
-                      }
-                    });
-                  },
-                  validator: (v) {
-                    if (v == null || v.isEmpty) return null;
-                    final n = int.tryParse(v);
-                    if (n == null || n <= 0) return 'Must be a positive number';
-                    return null;
-                  },
-                ),
-                if (_treatmentPlanTotalSessions != null) ...[
-                  const SizedBox(height: 14),
-                  TextFormField(
-                    controller: _sessionNumberController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      hintText: 'Session Number',
-                      prefixIcon: Icon(Icons.pin_rounded),
-                    ),
-                    validator: (v) {
-                      if (_treatmentPlanTotalSessions == null) return null;
-                      if (v == null || v.isEmpty) return 'Required';
-                      final n = int.tryParse(v);
-                      if (n == null || n <= 0) {
-                        return 'Must be a positive number';
-                      }
-                      if (n > _treatmentPlanTotalSessions!) {
-                        return 'Cannot exceed total sessions';
-                      }
-                      return null;
-                    },
-                    onChanged: (v) {
-                      _sessionNumber = int.tryParse(v);
-                    },
-                  ),
-                ],
-                const SizedBox(height: 14),
-                // Appointment Duration Selector
-                TextFormField(
-                  controller: _durationController,
-                  keyboardType: TextInputType.number,
-                  decoration: InputDecoration(
-                    hintText: 'Appointment Duration (minutes)',
-                    prefixIcon: const Icon(Icons.timer_outlined),
-                    suffixIcon: PopupMenuButton<int>(
-                      icon: const Icon(Icons.arrow_drop_down_rounded, size: 28),
-                      onSelected: (val) {
-                        setState(() {
-                          _durationMinutes = val;
-                          _durationController.text = val.toString();
-                        });
-                      },
-                      itemBuilder: (_) => [
-                        PopupMenuItem(
-                          value: 20,
-                          child: Text(
-                            '20 minutes',
-                            style: GoogleFonts.poppins(fontSize: 13),
-                          ),
-                        ),
-                        PopupMenuItem(
-                          value: 40,
-                          child: Text(
-                            '40 minutes',
-                            style: GoogleFonts.poppins(fontSize: 13),
-                          ),
-                        ),
-                        PopupMenuItem(
-                          value: 60,
-                          child: Text(
-                            '60 minutes',
-                            style: GoogleFonts.poppins(fontSize: 13),
-                          ),
-                        ),
-                        PopupMenuItem(
-                          value: 80,
-                          child: Text(
-                            '80 minutes',
-                            style: GoogleFonts.poppins(fontSize: 13),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  validator: (v) {
-                    if (v == null || v.isEmpty) return 'Duration is required';
-                    final n = int.tryParse(v);
-                    if (n == null || n <= 0) return 'Must be a positive number';
-                    if (n > 240) return 'Cannot exceed 240 minutes';
-                    return null;
-                  },
-                  onChanged: (v) {
-                    final n = int.tryParse(v);
-                    if (n != null && n > 0) {
-                      setState(() => _durationMinutes = n);
-                    }
-                  },
-                ),
-                const SizedBox(height: 14),
-                // Date of Birth picker
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: cs.primary.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(
-                      Icons.cake_rounded,
-                      color: cs.primary,
-                      size: 20,
-                    ),
-                  ),
-                  title: Text(
-                    _selectedDob == null
-                        ? 'Date of Birth (Optional)'
-                        : 'DOB: ${DateFormat('d MMM y').format(_selectedDob!)}  •  Age: ${DateTime.now().year - _selectedDob!.year} yrs',
-                    style: GoogleFonts.poppins(
-                      fontSize: 13,
-                      fontWeight: _selectedDob == null
-                          ? FontWeight.w400
-                          : FontWeight.w600,
-                      color: _selectedDob == null
-                          ? cs.onSurface.withValues(alpha: 0.45)
-                          : cs.onSurface,
-                    ),
-                  ),
-                  trailing: _selectedDob != null
-                      ? IconButton(
-                          icon: Icon(
-                            Icons.clear_rounded,
-                            size: 18,
-                            color: cs.onSurface.withValues(alpha: 0.4),
-                          ),
-                          onPressed: () => setState(() => _selectedDob = null),
-                        )
-                      : Icon(Icons.arrow_drop_down_rounded, color: cs.primary),
+                const SizedBox(height: 16),
+                // DOB Picker
+                InkWell(
                   onTap: () async {
-                    final picked = await showDatePicker(
+                    final dt = await showDatePicker(
                       context: context,
-                      initialDate: _selectedDob ?? DateTime(1990),
+                      initialDate:
+                          _selectedDob ??
+                          DateTime.now().subtract(
+                            const Duration(days: 365 * 30),
+                          ),
                       firstDate: DateTime(1920),
                       lastDate: DateTime.now(),
-                      helpText: 'Select Patient Date of Birth',
                     );
-                    if (picked != null) setState(() => _selectedDob = picked);
+                    if (dt != null) setState(() => _selectedDob = dt);
                   },
+                  child: InputDecorator(
+                    decoration: const InputDecoration(
+                      labelText: 'Date of Birth',
+                      prefixIcon: Icon(Icons.cake_outlined),
+                    ),
+                    child: Text(
+                      _selectedDob == null
+                          ? 'Select birthday'
+                          : DateFormat('d MMM yyyy').format(_selectedDob!),
+                      style: GoogleFonts.poppins(fontSize: 14),
+                    ),
+                  ),
                 ),
-                const SizedBox(height: 4),
-                const Divider(),
-                const SizedBox(height: 4),
-
-                // Posture Photo
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            'Clinical Details',
+            style: GoogleFonts.poppins(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 16),
+          PremiumCard(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              children: [
+                DropdownButtonFormField<String>(
+                  value: _service,
+                  decoration: const InputDecoration(
+                    labelText: 'Service Type',
+                    prefixIcon: Icon(Icons.medical_services_outlined),
+                  ),
+                  items: _services
+                      .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                      .toList(),
+                  onChanged: (v) => setState(() => _service = v!),
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _reasonController,
+                  maxLines: 2,
+                  decoration: const InputDecoration(
+                    labelText: 'Reason for Visit',
+                    prefixIcon: Icon(Icons.edit_note_rounded),
+                    hintText: 'e.g. Lower back pain, sciatica…',
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: _durationController,
+                        keyboardType: TextInputType.number,
+                        decoration: InputDecoration(
+                          labelText: 'Duration (min)',
+                          prefixIcon: const Icon(Icons.timer_outlined),
+                          suffixIcon: PopupMenuButton<int>(
+                            icon: const Icon(
+                              Icons.arrow_drop_down_rounded,
+                              size: 28,
+                            ),
+                            onSelected: (val) {
+                              setState(() {
+                                _durationMinutes = val;
+                                _durationController.text = val.toString();
+                              });
+                            },
+                            itemBuilder: (_) => [
+                              PopupMenuItem(
+                                value: 20,
+                                child: Text(
+                                  '20 minutes',
+                                  style: GoogleFonts.poppins(fontSize: 13),
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 40,
+                                child: Text(
+                                  '40 minutes',
+                                  style: GoogleFonts.poppins(fontSize: 13),
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 60,
+                                child: Text(
+                                  '60 minutes',
+                                  style: GoogleFonts.poppins(fontSize: 13),
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 80,
+                                child: Text(
+                                  '80 minutes',
+                                  style: GoogleFonts.poppins(fontSize: 13),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        onChanged: (val) {
+                          _durationMinutes = int.tryParse(val) ?? 40;
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Column(
+                      children: [
+                        Text(
+                          'Emergency',
+                          style: GoogleFonts.poppins(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Switch.adaptive(
+                          value: _isEmergency,
+                          activeColor: Colors.red,
+                          onChanged: (v) => setState(() => _isEmergency = v),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                // Treatment Plan Helpers
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: _totalSessionsController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Plan Total Sessions',
+                          hintText: 'e.g. 10',
+                        ),
+                        onChanged: (val) =>
+                            _treatmentPlanTotalSessions = int.tryParse(val),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: TextFormField(
+                        controller: _sessionNumberController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Current Session #',
+                          hintText: 'e.g. 1',
+                        ),
+                        onChanged: (val) => _sessionNumber = int.tryParse(val),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                // Posture Photo Picker
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -863,56 +801,56 @@ class _BookingScreenState extends ConsumerState<BookingScreen>
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          'Posture Photo (Optional)',
+                          'Initial Posture Photo (Optional)',
                           style: GoogleFonts.poppins(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
-                        const Spacer(),
-                        if (_posturalPhotoPath != null)
-                          TextButton.icon(
-                            icon: const Icon(
-                              Icons.delete_outline_rounded,
-                              size: 16,
-                            ),
-                            label: const Text('Remove'),
-                            style: TextButton.styleFrom(
-                              foregroundColor: Colors.red,
-                            ),
-                            onPressed: () =>
-                                setState(() => _posturalPhotoPath = null),
-                          ),
                       ],
                     ),
                     const SizedBox(height: 8),
                     if (_posturalPhotoPath != null)
-                      ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: Image.file(
-                        File(_posturalPhotoPath!),
-                        height: 160,
-                        width: double.infinity,
-                        fit: BoxFit.cover,
-                        cacheWidth: 800,
-                      ),
-                    )
+                      Stack(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.file(
+                              File(_posturalPhotoPath!),
+                              height: 120,
+                              width: double.infinity,
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                          Positioned(
+                            top: 4,
+                            right: 4,
+                            child: CircleAvatar(
+                              backgroundColor: Colors.black54,
+                              child: IconButton(
+                                icon: const Icon(
+                                  Icons.close,
+                                  color: Colors.white,
+                                ),
+                                onPressed: () =>
+                                    setState(() => _posturalPhotoPath = null),
+                              ),
+                            ),
+                          ),
+                        ],
+                      )
                     else
                       Row(
                         children: [
                           Expanded(
                             child: OutlinedButton.icon(
-                              icon: const Icon(
-                                Icons.camera_alt_rounded,
-                                size: 18,
-                              ),
+                              icon: const Icon(Icons.camera_alt_rounded),
                               label: const Text('Camera'),
                               onPressed: () async {
-                                final picker = ImagePicker();
-                                final img = await picker.pickImage(
+                                final img = await ImagePicker().pickImage(
                                   source: ImageSource.camera,
                                 );
-                                if (img != null && mounted) {
+                                if (img != null) {
                                   final compressed =
                                       await ImageService.compressPostureImage(
                                         File(img.path),
@@ -925,20 +863,16 @@ class _BookingScreenState extends ConsumerState<BookingScreen>
                               },
                             ),
                           ),
-                          const SizedBox(width: 10),
+                          const SizedBox(width: 12),
                           Expanded(
                             child: OutlinedButton.icon(
-                              icon: const Icon(
-                                Icons.photo_library_rounded,
-                                size: 18,
-                              ),
+                              icon: const Icon(Icons.photo_library_rounded),
                               label: const Text('Gallery'),
                               onPressed: () async {
-                                final picker = ImagePicker();
-                                final img = await picker.pickImage(
+                                final img = await ImagePicker().pickImage(
                                   source: ImageSource.gallery,
                                 );
-                                if (img != null && mounted) {
+                                if (img != null) {
                                   final compressed =
                                       await ImageService.compressPostureImage(
                                         File(img.path),
@@ -955,56 +889,18 @@ class _BookingScreenState extends ConsumerState<BookingScreen>
                       ),
                   ],
                 ),
-                const SizedBox(height: 4),
-                const Divider(),
-                const SizedBox(height: 4),
-
-                SwitchListTile.adaptive(
-                  value: _isEmergency,
-                  onChanged: (v) => setState(() => _isEmergency = v),
-                  title: Text(
-                    'Emergency / High Priority',
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13,
-                    ),
-                  ),
-                  subtitle: Text(
-                    'Mark this appointment as emergency',
-                    style: GoogleFonts.poppins(fontSize: 11),
-                  ),
-                  activeColor: const Color(0xFFEF4444),
-                  secondary: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFEF4444).withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(
-                      Icons.warning_amber_rounded,
-                      color: Color(0xFFEF4444),
-                      size: 20,
-                    ),
-                  ),
-                ),
               ],
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 32),
           SizedBox(
-            height: 52,
+            width: double.infinity,
+            height: 54,
             child: ElevatedButton(
               onPressed: () {
                 if (_canGoToStep1()) _goStep(1);
               },
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Text('Choose Date & Time'),
-                  const SizedBox(width: 8),
-                  const Icon(Icons.arrow_forward_rounded, size: 18),
-                ],
-              ),
+              child: const Text('Continue to Scheduling'),
             ),
           ),
         ],
@@ -1012,190 +908,96 @@ class _BookingScreenState extends ConsumerState<BookingScreen>
     );
   }
 
-  // ── Step 1: Schedule
-  Widget _buildStep1(ColorScheme cs) {
+  Widget _buildSchedulingStep(ColorScheme cs) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        PremiumCard(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: cs.primary.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Icon(
-                  Icons.calendar_month_rounded,
-                  color: cs.primary,
-                  size: 26,
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Select Date & Time',
-                      style: GoogleFonts.poppins(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 15,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Set precise appointment date and time.',
-                      style: GoogleFonts.poppins(
-                        fontSize: 12,
-                        color: cs.onSurface.withValues(alpha: 0.55),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 18),
-
-        Text(
-          'Manual Date & Time Selection',
-          style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14),
-        ),
-        const SizedBox(height: 10),
-        PremiumCard(
-          padding: const EdgeInsets.all(18),
-          child: Column(
-            children: [
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: cs.primary.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(Icons.today_rounded, color: cs.primary),
-                ),
-                title: Text(
-                  _selectedDate == null
-                      ? 'Select Date *'
-                      : DateFormat('EEEE, d MMMM y').format(_selectedDate!),
-                  style: GoogleFonts.poppins(
-                    fontSize: 14,
-                    fontWeight: _selectedDate == null
-                        ? FontWeight.w500
-                        : FontWeight.w700,
-                    color: _selectedDate == null
-                        ? cs.onSurface.withValues(alpha: 0.5)
-                        : cs.onSurface,
-                  ),
-                ),
-                trailing: Icon(
-                  Icons.arrow_drop_down_circle_outlined,
-                  color: cs.primary,
-                ),
-                onTap: () async {
-                  final d = await showDatePicker(
-                    context: context,
-                    initialDate:
-                        _selectedDate ??
-                        DateTime.now().add(const Duration(days: 1)),
-                    firstDate: DateTime.now().subtract(
-                      const Duration(days: 30),
-                    ),
-                    lastDate: DateTime.now().add(const Duration(days: 365)),
-                  );
-                  if (d != null) {
-                    setState(() => _selectedDate = d);
-                  }
-                },
-              ),
-              const Divider(height: 24),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: cs.primary.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(
-                    Icons.access_time_filled_rounded,
-                    color: cs.primary,
-                  ),
-                ),
-                title: Text(
-                  _selectedSlot ?? 'Select Precise Time *',
-                  style: GoogleFonts.poppins(
-                    fontSize: 14,
-                    fontWeight: _selectedSlot == null
-                        ? FontWeight.w500
-                        : FontWeight.w700,
-                    color: _selectedSlot == null
-                        ? cs.onSurface.withValues(alpha: 0.5)
-                        : cs.onSurface,
-                  ),
-                ),
-                trailing: Icon(
-                  Icons.arrow_drop_down_circle_outlined,
-                  color: cs.primary,
-                ),
-                onTap: () async {
-                  final t = await showTimePicker(
-                    context: context,
-                    initialTime: _selectedSlot != null
-                        ? TimeOfDay.fromDateTime(
-                            DateFormat('hh:mm a').parse(_selectedSlot!),
-                          )
-                        : const TimeOfDay(hour: 9, minute: 0),
-                  );
-                  if (t != null) {
-                    final dt = DateTime(2020, 1, 1, t.hour, t.minute);
-                    setState(
-                      () => _selectedSlot = DateFormat('hh:mm a').format(dt),
-                    );
-                  }
-                },
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 22),
-
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Expanded(
-              child: Text(
-                'Quick Select Slots (Optional)',
-                style: GoogleFonts.poppins(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 14,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+            IconButton(
+              icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
+              onPressed: () => _goStep(0),
+            ),
+            Text(
+              'Select Date & Time',
+              style: GoogleFonts.poppins(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
               ),
             ),
-            if (_selectedSlot != null) ...[
-              const SizedBox(width: 8),
-              TextButton(
-                onPressed: () => setState(() => _selectedSlot = null),
-                child: Text(
-                  'Clear time',
-                  style: GoogleFonts.poppins(
-                    fontSize: 12,
-                    color: Colors.redAccent,
-                  ),
-                ),
-              ),
-            ],
           ],
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 16),
+        Text(
+          'Available Dates',
+          style: GoogleFonts.poppins(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: cs.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 90,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: _dateOptions.length,
+            itemBuilder: (context, i) {
+              final date = _dateOptions[i];
+              final isSelected =
+                  _selectedDate != null &&
+                  _selectedDate!.day == date.day &&
+                  _selectedDate!.month == date.month;
+              return GestureDetector(
+                onTap: () => setState(() => _selectedDate = date),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  width: 65,
+                  margin: const EdgeInsets.only(right: 10),
+                  decoration: BoxDecoration(
+                    color: isSelected ? cs.primary : cs.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(16),
+                    border: isSelected
+                        ? null
+                        : Border.all(color: cs.outlineVariant),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        DateFormat('EEE').format(date),
+                        style: GoogleFonts.poppins(
+                          fontSize: 11,
+                          color: isSelected
+                              ? Colors.white70
+                              : cs.onSurfaceVariant,
+                        ),
+                      ),
+                      Text(
+                        date.day.toString(),
+                        style: GoogleFonts.poppins(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: isSelected ? Colors.white : cs.onSurface,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 24),
+        Text(
+          'Available Slots',
+          style: GoogleFonts.poppins(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: cs.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 12),
         GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
@@ -1211,34 +1013,23 @@ class _BookingScreenState extends ConsumerState<BookingScreen>
             final isSelected = _selectedSlot == slot;
             return GestureDetector(
               onTap: () => setState(() => _selectedSlot = slot),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
+              child: Container(
                 decoration: BoxDecoration(
                   color: isSelected ? cs.primary : cs.surface,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: isSelected
-                        ? cs.primary
-                        : cs.outline.withValues(alpha: 0.3),
+                    color: isSelected ? cs.primary : cs.outlineVariant,
                   ),
-                  boxShadow: isSelected
-                      ? [
-                          BoxShadow(
-                            color: cs.primary.withValues(alpha: 0.2),
-                            blurRadius: 8,
-                          ),
-                        ]
-                      : [],
                 ),
                 child: Center(
                   child: Text(
                     slot,
                     style: GoogleFonts.poppins(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: isSelected
-                          ? Colors.white
-                          : cs.onSurface.withValues(alpha: 0.7),
+                      fontSize: 11,
+                      fontWeight: isSelected
+                          ? FontWeight.bold
+                          : FontWeight.normal,
+                      color: isSelected ? Colors.white : cs.onSurface,
                     ),
                   ),
                 ),
@@ -1247,501 +1038,196 @@ class _BookingScreenState extends ConsumerState<BookingScreen>
           },
         ),
         const SizedBox(height: 32),
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton(
-                onPressed: () => _goStep(0),
-                child: const Text('Back'),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              flex: 2,
-              child: ElevatedButton(
-                onPressed: (_selectedDate != null && _selectedSlot != null)
-                    ? () => _goStep(2)
-                    : null,
-                child: const Text('Review Booking'),
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  // ── Step 2: Confirm
-  Widget _buildStep2(ColorScheme cs) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        PremiumCard(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: AppColors.statusConfirmedBg,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(
-                      Icons.check_circle_rounded,
-                      color: AppColors.statusConfirmed,
-                      size: 24,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Review your booking',
-                        style: GoogleFonts.poppins(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 15,
-                        ),
-                      ),
-                      Text(
-                        'Confirm details below',
-                        style: GoogleFonts.poppins(
-                          fontSize: 12,
-                          color: cs.onSurface.withValues(alpha: 0.55),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              const SizedBox(height: 18),
-              const Divider(),
-              const SizedBox(height: 14),
-              Text(
-                'Payment Selection',
-                style: GoogleFonts.poppins(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 14,
-                ),
-              ),
-              const SizedBox(height: 10),
-              _buildPaymentOption(
-                mode: PaymentMode.online,
-                title: 'Pay Online Now',
-                subtitle: 'Secure card/wallet payment',
-                icon: Icons.account_balance_wallet_rounded,
-                color: Colors.blueAccent,
-                cs: cs,
-              ),
-              const SizedBox(height: 10),
-              _buildPaymentOption(
-                mode: PaymentMode.cash,
-                title: 'Pay at Clinic / Cash',
-                subtitle: 'Pay at arrival on appointment',
-                icon: Icons.payments_rounded,
-                color: Colors.green,
-                cs: cs,
-              ),
-              const SizedBox(height: 14),
-              const Divider(),
-              const SizedBox(height: 14),
-              _ConfirmRow(label: 'Patient', value: _nameController.text),
-              _ConfirmRow(label: 'Phone', value: _phoneController.text),
-              if (_emailController.text.isNotEmpty)
-                _ConfirmRow(label: 'Email', value: _emailController.text),
-              _ConfirmRow(label: 'Treatment', value: _service),
-              if (_selectedDate != null)
-                _ConfirmRow(
-                  label: 'Date',
-                  value: DateFormat('EEEE, d MMMM y').format(_selectedDate!),
-                ),
-              if (_selectedSlot != null)
-                _ConfirmRow(label: 'Time', value: _selectedSlot!),
-              _ConfirmRow(label: 'Doctor', value: 'DR. BASHIR AHMAD'),
-              if (_treatmentPlanTotalSessions != null)
-                _ConfirmRow(
-                  label: 'Treatment Plan',
-                  value:
-                      'Session ${_sessionNumber ?? 1} of $_treatmentPlanTotalSessions Sessions Plan',
-                ),
-              _ConfirmRow(
-                label: 'Duration',
-                value: '$_durationMinutes minutes',
-              ),
-              if (_selectedDob != null)
-                _ConfirmRow(
-                  label: 'DOB / Age',
-                  value:
-                      '${DateFormat('d MMM y').format(_selectedDob!)}  •  ${DateTime.now().year - _selectedDob!.year} yrs',
-                ),
-              if (_isEmergency)
-                _ConfirmRow(
-                  label: 'Priority',
-                  value: 'EMERGENCY (Custom Time)',
-                ),
-              if (_reasonController.text.isNotEmpty)
-                _ConfirmRow(label: 'Reason', value: _reasonController.text),
-              _ConfirmRow(
-                label: 'Total Fee',
-                value: 'Rs. ${_currentPrice.toStringAsFixed(0)}',
-              ),
-              if (_posturalPhotoPath != null) ...[
-                const SizedBox(height: 8),
-                Text(
-                  'Posture Photo',
-                  style: GoogleFonts.poppins(
-                    fontSize: 12,
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.onSurface.withValues(alpha: 0.5),
-                  ),
-                ),
-                const SizedBox(height: 6),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
-                  child: Image.file(
-                    File(_posturalPhotoPath!),
-                    height: 120,
-                    width: double.infinity,
-                    fit: BoxFit.cover,
-                    cacheWidth: 800,
-                  ),
-                ),
-              ],
-              const SizedBox(height: 6),
-              const Divider(),
-              const SizedBox(height: 10),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppColors.statusPendingBg,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.info_outline_rounded,
-                      color: AppColors.statusPending,
-                      size: 18,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        'Appointment will be marked as Pending until confirmed by the clinic.',
-                        style: GoogleFonts.poppins(
-                          fontSize: 12,
-                          color: AppColors.statusPending,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+        Text(
+          'Payment Mode',
+          style: GoogleFonts.poppins(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: cs.onSurfaceVariant,
           ),
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 12),
         Row(
           children: [
             Expanded(
-              child: OutlinedButton(
-                onPressed: () => _goStep(1),
-                child: const Text('Back'),
+              child: _paymentChoice(
+                PaymentMode.cash,
+                'Pay at Clinic',
+                'Pay in-person (Cash/EasyPaisa)',
+                Icons.payments_outlined,
+                cs,
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
-              flex: 2,
-              child: ElevatedButton(
-                onPressed: _isSubmitting ? null : _submitBooking,
-                child: _isSubmitting
-                    ? const SizedBox(
-                        width: 22,
-                        height: 22,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2.5,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Text('Confirm Booking ✓'),
+              child: _paymentChoice(
+                PaymentMode.online,
+                'Pay Online',
+                'Secure checkout via Safepay',
+                Icons.credit_card_rounded,
+                cs,
               ),
             ),
           ],
+        ),
+        const SizedBox(height: 40),
+        SizedBox(
+          width: double.infinity,
+          height: 54,
+          child: ElevatedButton(
+            onPressed: _isSubmitting ? null : _submitBooking,
+            child: _isSubmitting
+                ? const CircularProgressIndicator(color: Colors.white)
+                : const Text('Confirm Appointment'),
+          ),
         ),
       ],
     );
   }
 
-  Widget _buildPaymentOption({
-    required PaymentMode mode,
-    required String title,
-    required String subtitle,
-    required IconData icon,
-    required Color color,
-    required ColorScheme cs,
-  }) {
-    final bool isSelected = _paymentMode == mode;
+  Widget _paymentChoice(
+    PaymentMode mode,
+    String title,
+    String sub,
+    IconData icon,
+    ColorScheme cs,
+  ) {
+    final isSelected = _paymentMode == mode;
     return GestureDetector(
       onTap: () => setState(() => _paymentMode = mode),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: isSelected ? color.withValues(alpha: 0.08) : cs.surface,
-          borderRadius: BorderRadius.circular(14),
+          color: isSelected ? cs.primary.withValues(alpha: 0.1) : cs.surface,
+          borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: isSelected ? color : cs.outline.withValues(alpha: 0.2),
-            width: isSelected ? 2 : 1.5,
-          ),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: isSelected ? color.withValues(alpha: 0.12) : cs.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(
-                icon,
-                color: isSelected ? color : cs.onSurface.withValues(alpha: 0.5),
-                size: 20,
-              ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 13.5,
-                      color: isSelected ? color : cs.onSurface,
-                    ),
-                  ),
-                  Text(
-                    subtitle,
-                    style: GoogleFonts.poppins(
-                      fontSize: 11,
-                      color: cs.onSurface.withValues(alpha: 0.5),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (isSelected)
-              Icon(Icons.check_circle_rounded, color: color, size: 22),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ── Supporting widgets
-
-class _StepIndicator extends StatelessWidget {
-  const _StepIndicator({required this.currentStep});
-  final int currentStep;
-
-  static const _labels = ['Patient Info', 'Schedule', 'Confirm'];
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Container(
-      color: Theme.of(context).scaffoldBackgroundColor,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      child: Row(
-        children: List.generate(3, (i) {
-          final isActive = i <= currentStep;
-          final isCurrent = i == currentStep;
-          return Expanded(
-            child: Row(
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 300),
-                      width: isCurrent ? 32 : 28,
-                      height: isCurrent ? 32 : 28,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: isActive ? cs.primary : cs.surface,
-                        border: Border.all(
-                          color: isActive
-                              ? cs.primary
-                              : cs.outline.withValues(alpha: 0.3),
-                          width: 1.5,
-                        ),
-                        boxShadow: isCurrent
-                            ? [
-                                BoxShadow(
-                                  color: cs.primary.withValues(alpha: 0.3),
-                                  blurRadius: 10,
-                                ),
-                              ]
-                            : [],
-                      ),
-                      child: Center(
-                        child: isActive && i < currentStep
-                            ? const Icon(
-                                Icons.check_rounded,
-                                color: Colors.white,
-                                size: 16,
-                              )
-                            : Text(
-                                '${i + 1}',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w700,
-                                  color: isActive
-                                      ? Colors.white
-                                      : cs.onSurface.withValues(alpha: 0.4),
-                                ),
-                              ),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      _labels[i],
-                      style: GoogleFonts.poppins(
-                        fontSize: 10,
-                        fontWeight: isCurrent
-                            ? FontWeight.w600
-                            : FontWeight.w400,
-                        color: isActive
-                            ? cs.primary
-                            : cs.onSurface.withValues(alpha: 0.4),
-                      ),
-                    ),
-                  ],
-                ),
-                if (i < 2)
-                  Expanded(
-                    child: Container(
-                      height: 1.5,
-                      margin: const EdgeInsets.only(bottom: 20),
-                      color: i < currentStep
-                          ? cs.primary
-                          : cs.outline.withValues(alpha: 0.25),
-                    ),
-                  ),
-              ],
-            ),
-          );
-        }),
-      ),
-    );
-  }
-}
-
-class _ServiceTile extends StatelessWidget {
-  const _ServiceTile({
-    required this.service,
-    required this.icon,
-    required this.color,
-    required this.isSelected,
-    required this.onTap,
-  });
-  final String service;
-  final IconData icon;
-  final Color color;
-  final bool isSelected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? color.withValues(alpha: 0.1)
-              : Theme.of(context).colorScheme.surface,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: isSelected
-                ? color
-                : Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+            color: isSelected ? cs.primary : cs.outlineVariant,
             width: 1.5,
           ),
         ),
-        child: Row(
+        child: Column(
           children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(icon, color: color, size: 18),
-            ),
-            const SizedBox(width: 12),
+            Icon(icon, color: isSelected ? cs.primary : cs.onSurfaceVariant),
+            const SizedBox(height: 8),
             Text(
-              service,
+              title,
               style: GoogleFonts.poppins(
-                fontWeight: FontWeight.w600,
-                fontSize: 13,
-                color: isSelected
-                    ? color
-                    : Theme.of(context).colorScheme.onSurface,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: isSelected ? cs.primary : cs.onSurface,
               ),
             ),
-            const Spacer(),
-            if (isSelected)
-              Icon(Icons.check_circle_rounded, color: color, size: 20),
+            Text(
+              sub,
+              style: GoogleFonts.poppins(
+                fontSize: 9,
+                color: cs.onSurfaceVariant,
+              ),
+              textAlign: TextAlign.center,
+            ),
           ],
         ),
       ),
     );
   }
-}
 
-class _ConfirmRow extends StatelessWidget {
-  const _ConfirmRow({required this.label, required this.value});
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 80,
-            child: Text(
-              label,
-              style: GoogleFonts.poppins(
-                fontSize: 13,
-                color: cs.onSurface.withValues(alpha: 0.5),
+  Widget _buildSuccessStep(ColorScheme cs) {
+    return Column(
+      children: [
+        const SizedBox(height: 40),
+        Container(
+          width: 80,
+          height: 80,
+          decoration: BoxDecoration(
+            color: AppColors.statusConfirmed.withValues(alpha: 0.15),
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(
+            Icons.check_circle_rounded,
+            color: AppColors.statusConfirmed,
+            size: 40,
+          ),
+        ),
+        const SizedBox(height: 24),
+        Text(
+          'Appointment Requested!',
+          style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Your visit has been successfully booked. You will receive a notification reminder 1 hour before.',
+          style: GoogleFonts.poppins(color: cs.onSurfaceVariant, fontSize: 14),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 40),
+        PremiumCard(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            children: [
+              _summaryRow('Patient', _nameController.text),
+              const Divider(height: 24),
+              _summaryRow(
+                'Date',
+                DateFormat('EEEE, d MMMM').format(_selectedDate!),
+              ),
+              const Divider(height: 24),
+              _summaryRow('Time', _selectedSlot!),
+              const Divider(height: 24),
+              _summaryRow('Treatment', _service),
+              const Divider(height: 24),
+              _summaryRow(
+                'Fee',
+                'PKR ${NumberFormat('#,##0').format(_currentPrice)}',
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 40),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton(
+                onPressed: () => context.go('/dashboard'),
+                child: const Text('Back to Dashboard'),
               ),
             ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              value,
-              style: GoogleFonts.poppins(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
+            const SizedBox(width: 12),
+            Expanded(
+              child: ElevatedButton(
+                onPressed: () {
+                  _nameController.clear();
+                  _phoneController.clear();
+                  _emailController.clear();
+                  _notesController.clear();
+                  _reasonController.clear();
+                  _goStep(0);
+                },
+                child: const Text('Book Another'),
               ),
             ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _summaryRow(String label, String value) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.poppins(
+            fontSize: 13,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
           ),
-        ],
-      ),
+        ),
+        Text(
+          value,
+          style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.bold),
+        ),
+      ],
     );
   }
 }

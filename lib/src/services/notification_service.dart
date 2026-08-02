@@ -7,7 +7,6 @@ import 'package:go_router/go_router.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 import 'package:flutter_tts/flutter_tts.dart';
-import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 
@@ -84,48 +83,6 @@ Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {
   }
 }
 
-@pragma('vm:entry-point')
-Future<void> _alarmCallback(int id) async {
-  try {
-    WidgetsFlutterBinding.ensureInitialized();
-    final prefs = await SharedPreferences.getInstance();
-    final title =
-        prefs.getString('alarm_title_$id') ?? 'GCT Appointment Reminder';
-    final body = prefs.getString('alarm_body_$id');
-    final payload = prefs.getString('alarm_payload_$id');
-
-    if (body != null) {
-      final localNotifications = FlutterLocalNotificationsPlugin();
-      const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
-      final initSettings = InitializationSettings(android: androidInit);
-      await localNotifications.initialize(initSettings);
-
-      const androidDetails = AndroidNotificationDetails(
-        'gct_scheduled_channel_v2',
-        'GCT Reminders',
-        channelDescription: 'Scheduled reminders for GCT app',
-        importance: Importance.max,
-        priority: Priority.high,
-        playSound: true,
-        enableVibration: true,
-        visibility: NotificationVisibility.public,
-      );
-      final details = NotificationDetails(android: androidDetails);
-      await localNotifications.show(id, title, body, details, payload: payload);
-
-      // Trigger Text-to-Speech speaking of patient name/time/day details
-      try {
-        final tts = FlutterTts();
-        await tts.setLanguage("en-US");
-        await tts.setSpeechRate(0.55);
-        await tts.setVolume(1.0);
-        await tts.setPitch(1.0);
-        await tts.speak(body);
-      } catch (_) {}
-    }
-  } catch (_) {}
-}
-
 class NotificationService {
   NotificationService._private();
   static final NotificationService _instance = NotificationService._private();
@@ -189,14 +146,18 @@ class NotificationService {
 
       if (defaultTargetPlatform == TargetPlatform.android) {
         try {
-          await _local
+          final androidImplementation = _local
               .resolvePlatformSpecificImplementation<
                 AndroidFlutterLocalNotificationsPlugin
-              >()
-              ?.requestNotificationsPermission();
+              >();
+
+          await androidImplementation?.requestNotificationsPermission();
+          await androidImplementation?.requestExactAlarmsPermission();
         } catch (e) {
           if (kDebugMode) {
-            debugPrint('Failed to request Android notification permission: $e');
+            debugPrint(
+              'Failed to request Android notification permissions: $e',
+            );
           }
         }
       }
@@ -438,6 +399,22 @@ class NotificationService {
   static int getPaymentReminderId(String id) =>
       (id.hashCode.abs() % 50000000) + 100000000;
 
+  Future<void> testZonedNotification(int delaySeconds) async {
+    final scheduledDate = DateTime.now().add(Duration(seconds: delaySeconds));
+    await scheduleLocalNotification(
+      id: 9999,
+      title: 'Background Test 🧪',
+      body: 'This notification was scheduled for $delaySeconds seconds delay.',
+      scheduledDate: scheduledDate,
+      payload: '/dashboard',
+    );
+    if (kDebugMode) {
+      debugPrint(
+        'Test notification scheduled for $delaySeconds seconds from now.',
+      );
+    }
+  }
+
   Future<void> scheduleLocalNotification({
     required int id,
     required String title,
@@ -449,32 +426,9 @@ class NotificationService {
       return;
     }
 
-    if (defaultTargetPlatform == TargetPlatform.android) {
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('alarm_title_$id', title);
-        await prefs.setString('alarm_body_$id', body);
-        await prefs.setString('alarm_payload_$id', payload ?? '');
-
-        await AndroidAlarmManager.oneShotAt(
-          scheduledDate,
-          id,
-          _alarmCallback,
-          alarmClock: true,
-          allowWhileIdle: true,
-          exact: true,
-          wakeup: true,
-        );
-      } catch (e) {
-        if (kDebugMode) {
-          debugPrint('AndroidAlarmManager scheduling failed: $e');
-        }
-      }
-    }
-
     const androidDetails = AndroidNotificationDetails(
-      'gct_scheduled_channel_v2',
-      'GCT Reminders',
+      'gct_scheduled_channel_v3',
+      'GCT Scheduled Reminders',
       channelDescription: 'Scheduled reminders for GCT app',
       importance: Importance.max,
       priority: Priority.high,
@@ -483,6 +437,7 @@ class NotificationService {
       visibility: NotificationVisibility.public,
       audioAttributesUsage: AudioAttributesUsage.alarm,
       category: AndroidNotificationCategory.alarm,
+      fullScreenIntent: true,
     );
     const iosDetails = DarwinNotificationDetails();
     final details = NotificationDetails(
@@ -490,7 +445,8 @@ class NotificationService {
       iOS: iosDetails,
     );
 
-    final tzScheduledDate = tz.TZDateTime.from(scheduledDate.toUtc(), tz.UTC);
+    // Use tz.local instead of UTC for accurate local scheduling
+    final tzScheduledDate = tz.TZDateTime.from(scheduledDate, tz.local);
 
     try {
       await _local.zonedSchedule(
@@ -602,11 +558,6 @@ class NotificationService {
   Future<void> cancelNotification(int id) async {
     try {
       await _local.cancel(id);
-      if (defaultTargetPlatform == TargetPlatform.android) {
-        try {
-          await AndroidAlarmManager.cancel(id);
-        } catch (_) {}
-      }
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('alarm_title_$id');
       await prefs.remove('alarm_body_$id');
@@ -614,6 +565,11 @@ class NotificationService {
     } catch (e) {
       if (kDebugMode) debugPrint('Failed to cancel notification $id: $e');
     }
+  }
+
+  Future<void> cancelAppointmentNotifications(String appointmentId) async {
+    await cancelNotification(getReminderId(appointmentId));
+    await cancelNotification(getStartId(appointmentId));
   }
 
   void _initConnectivityListener() {

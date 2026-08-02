@@ -2021,17 +2021,20 @@ class _ClinicalNotesScreenState extends ConsumerState<ClinicalNotesScreen> {
                         setDlgState(() => category = v ?? category),
                   ),
                   const SizedBox(height: 10),
-                  SwitchListTile(
-                    title: const Text(
-                      'Use SOAP Structure',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
+                  Material(
+                    color: Colors.transparent,
+                    child: SwitchListTile(
+                      title: const Text(
+                        'Use SOAP Structure',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
+                      value: isSoap,
+                      onChanged: (val) => setDlgState(() => isSoap = val),
+                      contentPadding: EdgeInsets.zero,
                     ),
-                    value: isSoap,
-                    onChanged: (val) => setDlgState(() => isSoap = val),
-                    contentPadding: EdgeInsets.zero,
                   ),
                   const SizedBox(height: 10),
                   if (isSoap) ...[

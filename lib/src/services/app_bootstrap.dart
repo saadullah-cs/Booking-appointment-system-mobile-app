@@ -4,7 +4,6 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 
 import '../../firebase_options.dart';
 import 'app_preferences.dart';
@@ -124,14 +123,6 @@ class AppBootstrapService {
         supportedPlatform != TargetPlatform.iOS &&
         supportedPlatform != TargetPlatform.macOS) {
       return;
-    }
-
-    if (supportedPlatform == TargetPlatform.android) {
-      try {
-        await AndroidAlarmManager.initialize();
-      } catch (e) {
-        debugPrint('AndroidAlarmManager initialization failed: $e');
-      }
     }
 
     await NotificationService().init();

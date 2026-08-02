@@ -1,46 +1,39 @@
-# Implementation Plan - Extreme Image Compression for AI Posture Scanning
+# Implementation Plan - Fix Crashes, Auth Loops, and Security Lock
 
-This plan outlines the integration of `flutter_image_compress` to reduce image sizes by ~80% (JPEG, 65% quality) across the AI posture scanning and appointment photo flows. This will optimize local storage and minimize future Firebase Storage costs.
-
-## User Review Required
-
-> [!IMPORTANT]
-> The current codebase does not explicitly upload images to Firebase Storage. I will implement the compression immediately after image selection so that all subsequent operations (local display, PDF generation, or future Firebase integration) benefit from the reduced file size.
+This plan addresses the `BookingScreen` crash, the Firebase `invalid-credential` loop, and restores the PIN/Biometric lock functionality.
 
 ## Proposed Changes
-
-### [Core Dependencies]
-
-#### [MODIFY] [pubspec.yaml](file:///D:/Android/Booking-appointment-system-mobile-app/pubspec.yaml)
-- Add `flutter_image_compress: ^2.3.0` to the dependencies.
-
-### [Utilities]
-
-#### [NEW] [image_service.dart](file:///D:/Android/Booking-appointment-system-mobile-app/lib/src/features/utils/image_service.dart)
-- Create a dedicated service for image operations to maintain professional architecture.
-- Implement `compressPostureImage` using `flutter_image_compress`.
-- Handle temporary file creation and cleanup of raw source files.
-
-### [Feature: Vision Analyzer]
-
-#### [MODIFY] [vision_analyzer_screen.dart](file:///D:/Android/Booking-appointment-system-mobile-app/lib/src/features/vision_analyzer/vision_analyzer_screen.dart)
-- Integrate `ImageService` into the `_capture` workflow.
-- Add `// REMOVE:` comments to guide the user through the compression and cleanup steps.
 
 ### [Feature: Appointments]
 
 #### [MODIFY] [booking_screen.dart](file:///D:/Android/Booking-appointment-system-mobile-app/lib/src/features/appointments/booking_screen.dart)
-- Update the posture photo capture logic (camera/gallery) to use the compression service.
+- Clean up `dispose()` method.
+- Remove redundant calls to `_emailController.dispose()`, `_nameController.dispose()`, `_phoneController.dispose()`, and `_professionController.dispose()`.
+- Ensure all controllers are disposed exactly once to prevent the "used after being disposed" crash.
 
-#### [MODIFY] [appointment_detail_screen.dart](file:///D:/Android/Booking-appointment-system-mobile-app/lib/src/features/appointments/appointment_detail_screen.dart)
-- Update the image picking logic in edit mode to include compression.
+---
+
+### [Feature: Auth & Routing]
+
+#### [MODIFY] [app_router.dart](file:///D:/Android/Booking-appointment-system-mobile-app/lib/src/routes/app_router.dart)
+- Update the `/` route to point to `SplashEntryScreen` instead of `LoginScreen`.
+- This ensures that the app always starts with the splash screen logic which checks for existing sessions and security locks.
+
+#### [MODIFY] [splash_entry_screen.dart](file:///D:/Android/Booking-appointment-system-mobile-app/lib/src/features/auth/screens/splash_entry_screen.dart)
+- Enhance `invalid-credential` error handling.
+- When this error occurs, explicitly clear `local_auth_current_user` from `AppPreferences` and call `FirebaseAuth.instance.signOut()`.
+- Add a final fallback to `context.go('/login')` if any auth validation fails.
+
+#### [MODIFY] [app_shell_scaffold.dart](file:///D:/Android/Booking-appointment-system-mobile-app/lib/src/features/shared/widgets/app_shell_scaffold.dart)
+- Review the `didChangeAppLifecycleState` logic to ensure `security_unlocked` is reset to `false` when the app is paused.
+- Ensure `_checkPinLockOnResume()` is called reliably to trigger the `SecurityLockScreen`.
 
 ## Verification Plan
 
 ### Automated Tests
-- No existing automated tests cover image picking, but I will ensure the code compiles and follows Flutter best practices.
+- N/A (Manual verification on physical device/emulator is preferred for lifecycle and auth loops).
 
 ### Manual Verification
-1. **Vision Analyzer**: Capture an image and verify it is compressed (size check in logs if possible, or visual check).
-2. **Booking/Detail Screens**: Pick a posture photo and ensure it displays correctly after compression.
-3. **Cleanup**: Verify the raw file path is replaced by the compressed file path and original cache is cleared.
+1. **Crash Fix**: Open `BookingScreen`, fill details, then exit the screen. Verify no crash occurs in the debug console during disposal.
+2. **Auth Loop**: Simulate an invalid credential state (e.g., by deleting the user in Firebase Console). Verify the app routes to the Login screen instead of spinning at the splash.
+3. **Security Lock**: Enable PIN lock in Settings. Close the app and restart. Verify `SecurityLockScreen` appears. Minimize the app and resume. Verify `SecurityLockScreen` appears.

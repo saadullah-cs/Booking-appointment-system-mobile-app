@@ -538,65 +538,68 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
                 const SizedBox(height: 10),
                 PremiumCard(
                   padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Column(
-                    children: [
-                      SwitchListTile.adaptive(
-                        value: _pinEnabled,
-                        onChanged: _togglePinLock,
-                        title: Text(
-                          'PIN Lock Protection',
-                          style: GoogleFonts.poppins(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 14,
+                  child: Material(
+                    color: Colors.transparent,
+                    child: Column(
+                      children: [
+                        SwitchListTile.adaptive(
+                          value: _pinEnabled,
+                          onChanged: _togglePinLock,
+                          title: Text(
+                            'PIN Lock Protection',
+                            style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                            ),
+                          ),
+                          subtitle: Text(
+                            'Require a 4-digit code to open the application',
+                            style: GoogleFonts.poppins(fontSize: 12),
+                          ),
+                          secondary: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: cs.primary.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Icon(
+                              Icons.pin_rounded,
+                              color: cs.primary,
+                              size: 20,
+                            ),
                           ),
                         ),
-                        subtitle: Text(
-                          'Require a 4-digit code to open the application',
-                          style: GoogleFonts.poppins(fontSize: 12),
-                        ),
-                        secondary: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: cs.primary.withValues(alpha: 0.08),
-                            borderRadius: BorderRadius.circular(10),
+                        const Divider(height: 1, indent: 16, endIndent: 16),
+                        SwitchListTile.adaptive(
+                          value: _biometricEnabled,
+                          onChanged: _pinEnabled ? _toggleBiometrics : null,
+                          title: Text(
+                            'Biometric Fingerprint',
+                            style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                            ),
                           ),
-                          child: Icon(
-                            Icons.pin_rounded,
-                            color: cs.primary,
-                            size: 20,
+                          subtitle: Text(
+                            'Verify your identity using fingerprint scanner',
+                            style: GoogleFonts.poppins(fontSize: 12),
                           ),
-                        ),
-                      ),
-                      const Divider(height: 1, indent: 16, endIndent: 16),
-                      SwitchListTile.adaptive(
-                        value: _biometricEnabled,
-                        onChanged: _pinEnabled ? _toggleBiometrics : null,
-                        title: Text(
-                          'Biometric Fingerprint',
-                          style: GoogleFonts.poppins(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 14,
-                          ),
-                        ),
-                        subtitle: Text(
-                          'Verify your identity using fingerprint scanner',
-                          style: GoogleFonts.poppins(fontSize: 12),
-                        ),
-                        secondary: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: (_pinEnabled ? cs.primary : Colors.grey)
-                                .withValues(alpha: 0.08),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Icon(
-                            Icons.fingerprint_rounded,
-                            color: _pinEnabled ? cs.primary : Colors.grey,
-                            size: 20,
+                          secondary: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: (_pinEnabled ? cs.primary : Colors.grey)
+                                  .withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Icon(
+                              Icons.fingerprint_rounded,
+                              color: _pinEnabled ? cs.primary : Colors.grey,
+                              size: 20,
+                            ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
                 if (_pinEnabled) ...[
