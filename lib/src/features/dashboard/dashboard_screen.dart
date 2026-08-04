@@ -394,14 +394,27 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     if (!mounted) return;
     final user = ref.read(authStateProvider).asData?.value;
     if (user != null && user.email.isNotEmpty) {
-      unawaited(
-        FirebaseFirestore.instance
+      try {
+        await FirebaseFirestore.instance
             .collection('settings')
             .doc('clinic_config')
             .set({
-              'doctorEmail': user.email.trim().toLowerCase(),
-            }, SetOptions(merge: true)),
-      );
+          'doctorEmail': user.email.trim().toLowerCase(),
+        }, SetOptions(merge: true));
+      } on FirebaseException catch (e) {
+        debugPrint('Firestore permission error: $e');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Permission denied: Cannot update settings'),
+              backgroundColor: Theme.of(context).colorScheme.error,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      } catch (e) {
+        debugPrint('Unexpected error updating clinic config: $e');
+      }
     }
 
     if (!mounted) return;

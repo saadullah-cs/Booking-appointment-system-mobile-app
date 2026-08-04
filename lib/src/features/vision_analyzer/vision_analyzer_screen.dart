@@ -2117,7 +2117,16 @@ ${_doctorNotes.isEmpty ? 'None provided.' : _doctorNotes}
             children: [
               Icon(Icons.trending_up_rounded, color: Colors.greenAccent.shade400, size: 20),
               const SizedBox(width: 8),
-              Text('PATIENT RECOVERY PROGRESS (BASELINE VS TODAY)', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w800, color: Colors.greenAccent.shade400)),
+              Expanded(
+                child: Text(
+                  'PATIENT RECOVERY PROGRESS (BASELINE VS TODAY)',
+                  style: GoogleFonts.poppins(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.greenAccent.shade400,
+                  ),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 12),
